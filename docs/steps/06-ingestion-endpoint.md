@@ -32,6 +32,7 @@ Wire both routers into `main.py`.
 
 - In Swagger: authenticate, `POST /ingest/video` with a real YouTube URL, note the `job_id`.
 - Poll `GET /jobs/{job_id}` every few seconds until `status` is `ready` or `failed`.
-- In psql: `select status from videos` → `ready`. `select count(*) from chunks` → ~80–100 for a 1-hour video. `select vector_dims(embedding) from chunks limit 1` → 1536. `select min(length(text)) from chunks` → ≥40.
+- In psql: `select status from videos` → `ready`. `select count(*) from chunks` → ~100 for a 1-hour video (target 45 s, constant 10 s overlap). `select vector_dims(embedding) from chunks limit 1` → 1536. `select min(length(text)) from chunks` → ≥40.
 - Re-post the same URL → returns `already_ready`, no new rows created.
 - Post a URL for a video with captions disabled → `status='failed'` with a sensible error message.
+- `tests/test_ingest.py` — monkeypatch `fetch_metadata`, `fetch_transcript`, and `embed_texts` so the test runs offline; assert the `queued → fetching → embedding → ready` transitions, the chunk count, 1536-d embeddings, and that re-posting the same URL is a no-op.
