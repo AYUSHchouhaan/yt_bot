@@ -36,4 +36,4 @@
 - Valid token → `GET /me` returns **200** with email, and an `app_users` row exists in the database.
 - Click "Continue with Google" in the browser → lands on the protected page.
 - Sign out → redirected to `/signin`.
-- Write a pytest test that constructs a JWT with `pyjwt` (using your JWT secret), sends it as a bearer header to `/me` via `httpx.AsyncClient`, and asserts 200 + user creation. Test expired token → 401.
+- `tests/test_auth.py` — build a JWT with `pyjwt` from a test secret, send it as a bearer header to `/me` through the `client` fixture from `tests/conftest.py`, and assert **200** plus an `app_users` row. Add cases for missing header and expired token → **401**. Verification is local, so no network is needed.
