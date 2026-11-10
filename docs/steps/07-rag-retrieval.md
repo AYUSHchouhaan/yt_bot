@@ -38,4 +38,5 @@ Wire the router into `main.py`.
 - Confirm both a user and an assistant `Message` row exist in the database after the stream closes.
 - Ask a question whose answer exists at a known timestamp → citation `start_s` is within ±30 s.
 - Ask something absent from the transcript → the model refuses rather than hallucinating.
-- Write a pytest test: create chunks for user A, query as user B → zero results returned (scope isolation).
+- `tests/test_retrieval.py` — seed chunks for users A and B through the rollback fixture in `tests/conftest.py`, then assert `hybrid_search` as B returns none of A's chunks, that RRF ordering is stable, and that `hnsw.ef_search` is applied.
+- `tests/test_chat.py` — monkeypatch `stream_answer` to yield fixed frames and assert SSE order: `citations` before any `delta`, then `done`.
