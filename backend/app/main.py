@@ -5,7 +5,9 @@ from app.config import settings
 
 app = FastAPI(title="yt_bot API")
 
-origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+origins = [
+    origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
