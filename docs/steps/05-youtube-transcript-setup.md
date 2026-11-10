@@ -17,16 +17,25 @@
 - **`cues_to_sentences(cues)`** — two modes:
   - If the joined text has punctuation: concatenate all cues, build a char-offset-to-time map, split on `[.!?]`, map each sentence back to the first/last cue's timestamps.
   - If no punctuation (auto-captions): group consecutive cues into ~12 s pseudo-sentences on cue boundaries.
-- **`build_chunks(sentences, target=45, lo=35, hi=55, overlap=10)`** — walk sentences, accumulate toward 45 s, guarantee ≥35 s, never exceed 55 s. Cut only on sentence boundaries. Advance the start pointer with 10 s overlap (next chunk begins at the first sentence whose start is within 10 s of the previous chunk's end). Skip chunks under 40 chars. Return `Chunk(text, start_s, end_s)` objects.
+- **`build_chunks(sentences, target=45, lo=35, hi=55, overlap=10)`** — walk sentences, accumulate toward 45 s, guarantee ≥35 s, never exceed 55 s. Cut only on sentence boundaries. Skip chunks under 40 chars. Return `Chunk(text, start_s, end_s)` objects.
+
+### Overlap rule (get this right)
+
+- The next chunk starts **10 s before the previous chunk's end**, not at a fixed step. Step between starts ≈ chunk length − 10, so roughly 35–45 s.
+- Example: chunk 1 `[0, 45]` → chunk 2 starts at **35** → chunk 3 starts at ~70. If chunk 1 is `[0, 55]`, chunk 2 starts at **45**.
+- The 35–55 bounds constrain **length**, not the start offset. The overlap is always 10 s — never "10 or 20 depending".
+- Sentence alignment nudges the start to the first sentence boundary at or after `end − 10`, so the real overlap is 10–15 s.
+- Expect ~100 chunks per hour of video.
 
 ### `app/services/__init__.py` — empty.
 
 ## How to test
 
-- Write a `scripts/test_transcript.py` that fetches a known video (e.g. a 3Blue1Brown video), prints cue count, sentence count, chunk count, and the first 3 chunks with time ranges. Run with `uv run python scripts/test_transcript.py`.
-- Write pytest unit tests for the chunker using synthetic cue fixtures:
+- `tests/test_transcript_live.py` — an opt-in live test that fetches a known video (e.g. a 3Blue1Brown video) and prints cue count, sentence count, chunk count, and the first 3 chunks with time ranges. Mark it `@pytest.mark.network` and skip unless `RUN_NETWORK_TESTS=1`, so the default `uv run pytest` stays offline.
+- `tests/test_chunker.py` — unit tests for the chunker using synthetic cue fixtures (put the fixtures in `tests/fixtures/`, not inline scripts):
   - No chunk ends mid-sentence (every non-final chunk ends with `.`, `!`, or `?`).
   - Every chunk duration is between 30 and 60 s.
-  - Consecutive chunks overlap (next chunk's `start_s` ≤ previous chunk's `end_s`).
+  - Consecutive chunks overlap by a constant ~10 s: `previous.end_s − next.start_s ≈ 10` (10–15 s after sentence alignment), not a varying 10–20 s.
+  - Chunk count is roughly 100 per hour (step ≈ length − 10).
   - No chunk text is under 40 characters.
   - Works with unpunctuated cues (auto-caption mode) — still produces valid chunks.
