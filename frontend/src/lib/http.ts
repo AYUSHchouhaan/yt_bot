@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 const API_BASE = '/api'
 
 export async function apiFetch<T>(
@@ -9,7 +11,18 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json')
   }
 
+  const { data } = await supabase.auth.getSession()
+  if (data.session?.access_token) {
+    headers.set('Authorization', `Bearer ${data.session.access_token}`)
+  }
+
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers })
+
+  if (response.status === 401) {
+    await supabase.auth.signOut()
+    window.location.assign('/signin')
+    throw new Error('Unauthorized')
+  }
 
   if (!response.ok) {
     throw new Error(
