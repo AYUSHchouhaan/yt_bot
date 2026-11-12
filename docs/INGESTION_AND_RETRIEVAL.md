@@ -1,6 +1,6 @@
 # yt_bot — Ingestion & Retrieval Architecture
 
-Covers: transcript acquisition, sentence-aware time chunking, vector storage and scoping, retrieval strategy (semantic vs BM25 vs hybrid), reranking, hierarchical indexing, and how the LLM-assignment techniques map onto this project.
+Covers: transcript acquisition, time-based chunking, vector storage and scoping, retrieval strategy (semantic vs BM25 vs hybrid), reranking, hierarchical indexing, and how the LLM-assignment techniques map onto this project.
 
 ---
 
@@ -21,104 +21,49 @@ URL
  └─► parse (video id / playlist id)
      └─► metadata            yt-dlp extract_info(download=False)
          └─► cues            youtube-transcript-api → yt-dlp VTT fallback
-             └─► clean       dedupe rolling captions, drop [Music], normalize whitespace
-                 └─► sentences       merge cue fragments into full sentences
-                     └─► windows     35–55 s blocks, 10 s overlap
-                         └─► embed   OpenAI text-embedding-3-small, batches of 64
-                             └─► insert chunks (+ tsv for BM25)
+             └─► clean       dedupe rolling captions (auto-captions only)
+                 └─► windows     45 s windows, 35 s stride → 10 s overlap
+                     └─► embed   OpenAI text-embedding-3-small, batches of 64
+                         └─► insert chunks (+ tsv for BM25)
 ```
 
 ### 2.1 Cue cleaning
 
+Minimal on purpose. Rolling duplicates are the only real problem, and only auto-captions have them. Whitespace and `[Music]` lines are cosmetic and stay.
+
 ```python
-def clean_cues(cues):
+def clean_cues(cues, source):
+    if source != "auto_captions":
+        return list(cues)
     out, prev = [], None
     for c in cues:
-        t = " ".join(c["text"].split())
-        if not t or re.fullmatch(r"\[(music|applause|laughter)\]", t, re.I):
+        if c.text == prev:
             continue
-        if t == prev:              # auto-captions repeat the rolling line
-            continue
-        out.append({"start": c["start"], "end": c["start"] + c["duration"], "text": t})
-        prev = t
+        out.append(c)
+        prev = c.text
     return out
 ```
 
-### 2.2 Cues → sentences (the part that fixes broken sentences)
+### 2.2 Cues → time windows
 
-Two modes, chosen by whether the captions carry punctuation.
-
-**Punctuated captions** — concatenate the cues, run a sentence splitter over the full text, then map each sentence's character range back to cue timestamps via an offset table. This guarantees no sentence is ever split.
+Fixed windows, no sentence splitting. Chunk `n` covers `[start, start + 45)`, the next starts 35 s later, so every chunk shares 10 s with its predecessor.
 
 ```python
-def cues_to_sentences(cues, splitter):
-    text, offsets, pos = "", [], 0
-    for c in cues:
-        offsets.append((pos, pos + len(c["text"]), c["start"], c["end"]))
-        text += c["text"] + " "
-        pos = len(text)
-    sentences = []
-    for s in splitter(text):                     # pysbd / nltk.sent_tokenize
-        span = (text.find(s), text.find(s) + len(s))
-        hits = [o for o in offsets if o[1] > span[0] and o[0] < span[1]]
-        if hits:
-            sentences.append({"text": s.strip(),
-                              "start": hits[0][2], "end": hits[-1][3]})
-    return sentences
-```
-
-**Auto-captions (no punctuation)** — punctuation-based splitting fails, so group consecutive cues into 10–15 s pseudo-sentences on cue boundaries. Every window still ends on a cue boundary, so a caption fragment is never cut in half.
-
-```python
-def cues_to_pseudo_sentences(cues, target=12):
-    sentences, buf = [], []
-    for c in cues:
-        buf.append(c)
-        if buf[-1]["end"] - buf[0]["start"] >= target:
-            sentences.append({"text": " ".join(x["text"] for x in buf),
-                              "start": buf[0]["start"], "end": buf[-1]["end"]})
-            buf = []
-    if buf:
-        sentences.append({"text": " ".join(x["text"] for x in buf),
-                          "start": buf[0]["start"], "end": buf[-1]["end"]})
-    return sentences
-```
-
-### 2.3 Sentences → time windows
-
-Target **45 s**, hard bounds **35–55 s**, overlap **10 s**. Windows always cut on sentence boundaries, so the 10 s overlap is what carries a sentence that straddles a boundary into the *next* chunk as well.
-
-```python
-def build_chunks(sentences, target=45, lo=35, hi=55, overlap=10):
-    chunks, i, n = [], 0, len(sentences)
-    while i < n:
-        start = sentences[i]["start"]
-        j = i
-        while j + 1 < n and sentences[j + 1]["end"] - start <= target:
-            j += 1                                   # grow toward 45 s
-        while j + 1 < n and sentences[j]["end"] - start < lo \
-              and sentences[j + 1]["end"] - start <= hi:
-            j += 1                                   # guarantee ≥ 35 s
-        text = " ".join(s["text"] for s in sentences[i:j + 1]).strip()
-        end = sentences[j]["end"]
-        if len(text) >= 40:
-            chunks.append({"text": text, "start_s": start, "end_s": end})
-        k = i + 1
-        while k <= j and sentences[k]["start"] < end - overlap:
-            k += 1                                   # step forward, keep 10 s tail
-        i = max(k, i + 1)
+def build_chunks(cues, window=45, stride=35):
+    if not cues:
+        return []
+    last_end = max(c.end for c in cues)
+    chunks, start = [], cues[0].start
+    while start < last_end:
+        end = min(start + window, last_end)
+        text = " ".join(c.text for c in cues if start <= c.start < start + window).strip()
+        if text:
+            chunks.append(Chunk(text=text, start_s=start, end_s=end))
+        start += stride
     return chunks
 ```
 
-| Parameter | Value | Why |
-|---|---|---|
-| Target duration | 45 s | ~110 spoken words ≈ 145 tokens ≈ 850 chars — good precision/context balance |
-| Min / max | 35 / 55 s | absorbs irregular cue lengths, never produces a 5 s orphan |
-| Overlap | 10 s | a sentence crossing a boundary appears in both neighbours |
-| Min text | 40 chars | drops `[Music]`-only or orphan fragments |
-| Cut point | sentence boundary | never splits mid-sentence |
-
-Typical result: **~85–95 chunks per hour of video**.
+A sentence cut at a boundary is re-covered by the next chunk **if it starts inside the 10 s overlap and lasts ≤10 s**. Longer sentences can still split across both chunks — accepted tradeoff for the simpler implementation. Chunks are not topic-aligned, so one may mix the tail of a point with the start of the next.
 
 ### 2.4 Enrichment before embedding
 
@@ -314,7 +259,7 @@ Cheap sanity checks before the full eval:
 
 ## 8. Pitfalls
 
-1. **Never chunk by characters alone** — you lose sentences, timestamps are lost, and citations become unusable.
+1. **Chunk by time, not by characters** — character offsets carry no timestamps, so citations become unusable.
 2. **Auto-captions need cleaning before embedding** — rolling duplicates inflate similarity scores and waste context.
 3. **Re-ingest must delete old chunks** in the same transaction, keyed by `video_id`, or duplicates silently accumulate (the unique index helps, but stale chunks from a longer old transcript remain).
 4. **Filtered ANN under-return** — always over-fetch and verify with `EXPLAIN ANALYZE`.
