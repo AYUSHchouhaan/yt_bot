@@ -14,8 +14,8 @@
 ### `app/services/ingest.py`
 - **`ingest_video(video_id, user_id, session)`** — the orchestrator. Steps:
   1. Load the video row, verify ownership.
-  2. Set `status='fetching'`, commit. Call `fetch_metadata` + `fetch_transcript` + `clean_cues`. Store `full_text` and `segments` JSONB on the video row.
-  3. Set `status='embedding'`, commit. Run `cues_to_sentences` → `build_chunks`. Delete any existing chunks for this video (re-ingest safety). Embed all chunk texts. Bulk-insert chunk rows with `video_id`, `user_id`, `playlist_id`, `chunk_index`, `text`, `start_s`, `end_s`, `content_hash`, `embedding_model`, `embedding`.
+  2. Set `status='fetching'`, commit. Call `fetch_metadata` + `fetch_transcript` + `clean_cues(cues, source)`. Store `full_text` and `segments` JSONB on the video row.
+  3. Set `status='embedding'`, commit. Run `build_chunks(cues)`. Delete any existing chunks for this video (re-ingest safety). Embed all chunk texts. Bulk-insert chunk rows with `video_id`, `user_id`, `playlist_id`, `chunk_index`, `text`, `start_s`, `end_s`, `content_hash`, `embedding_model`, `embedding`.
   4. Set `status='ready'`, commit.
   5. On any exception: set `status='failed'`, store truncated error, re-raise.
 
@@ -32,7 +32,7 @@ Wire both routers into `main.py`.
 
 - In Swagger: authenticate, `POST /ingest/video` with a real YouTube URL, note the `job_id`.
 - Poll `GET /jobs/{job_id}` every few seconds until `status` is `ready` or `failed`.
-- In psql: `select status from videos` → `ready`. `select count(*) from chunks` → ~100 for a 1-hour video (target 45 s, constant 10 s overlap). `select vector_dims(embedding) from chunks limit 1` → 1536. `select min(length(text)) from chunks` → ≥40.
+- In psql: `select status from videos` → `ready`. `select count(*) from chunks` → ~100 for a 1-hour video (45 s windows, 35 s stride). `select vector_dims(embedding) from chunks limit 1` → 1536. `select max(end_s - start_s) from chunks` → ≤45.
 - Re-post the same URL → returns `already_ready`, no new rows created.
 - Post a URL for a video with captions disabled → `status='failed'` with a sensible error message.
 - `tests/test_ingest.py` — monkeypatch `fetch_metadata`, `fetch_transcript`, and `embed_texts` so the test runs offline; assert the `queued → fetching → embedding → ready` transitions, the chunk count, 1536-d embeddings, and that re-posting the same URL is a no-op.
