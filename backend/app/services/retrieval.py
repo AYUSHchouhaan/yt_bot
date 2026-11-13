@@ -1,13 +1,12 @@
-from typing import Any, Literal
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.models import Playlist, Video
+from app.schemas.scope_kind import ScopeKind
 from app.services.embeddings import embed_query
-
-ScopeKind = Literal["video", "playlist", "library"]
 
 
 class ScopeError(ValueError):
