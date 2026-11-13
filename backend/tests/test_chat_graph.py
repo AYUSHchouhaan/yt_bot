@@ -14,10 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import engine
 from app.models import AppUser, Chunk, Playlist, Video
-from app.services.chat_graph import (
-    _psycopg_url,
+from app.services.chat import (
     build_compiled_graph,
     create_checkpointer_conn,
+    psycopg_url,
 )
 
 TEST_SECRET = "test-secret-0123456789abcdefghijklmnopqrstuv"
@@ -282,7 +282,7 @@ async def test_multiturn_memory_via_postgres(
         ]
     )
 
-    conn = await create_checkpointer_conn(_psycopg_url(settings.database_url))
+    conn = await create_checkpointer_conn(psycopg_url(settings.database_url))
     try:
         checkpointer = AsyncPostgresSaver(conn)
         await checkpointer.setup()
@@ -358,7 +358,7 @@ async def test_citations_and_messages_rows(
         def bind_tools(self, tools: object) -> FakeLLM:
             return FakeLLM([_tool_call(), _answer("The answer is 42 [1].")])
 
-    monkeypatch.setattr("app.services.chat_graph.ChatOpenAI", _FakeChat)
+    monkeypatch.setattr("app.services.chat.graph.ChatOpenAI", _FakeChat)
 
     response = await client.post(
         "/chat",
