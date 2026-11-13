@@ -1,15 +1,11 @@
 from typing import Any
 
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.rag_search_args import RagSearchArgs
 from app.services.rag import build_context
 from app.services.retrieval import hybrid_search
-
-
-class RagSearchArgs(BaseModel):
-    query: str
 
 
 class RagSearchTool:
