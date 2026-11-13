@@ -12,10 +12,12 @@ from youtube_transcript_api import (
 )
 
 _VIDEO_URL = "https://www.youtube.com/watch?v={video_id}"
+_PLAYLIST_URL = "https://www.youtube.com/playlist?list={playlist_id}"
 _VIDEO_ID_PATTERN = re.compile(
     r"(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:watch\?[^#]*?\bv=|shorts/|embed/))"
     r"([A-Za-z0-9_-]{11})"
 )
+_PLAYLIST_ID_PATTERN = re.compile(r"[?&]list=([A-Za-z0-9_-]+)")
 _VTT_TIMESTAMP = re.compile(r"(\d+:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d+:\d{2}:\d{2}\.\d{3})")
 _VTT_TAG = re.compile(r"<[^>]+>")
 
@@ -30,6 +32,50 @@ class Cue:
 def parse_youtube_url(url: str) -> str | None:
     match = _VIDEO_ID_PATTERN.search(url)
     return match.group(1) if match else None
+
+
+def parse_playlist_url(url: str) -> str | None:
+    match = _PLAYLIST_ID_PATTERN.search(url)
+    return match.group(1) if match else None
+
+
+@dataclass
+class PlaylistItem:
+    youtube_video_id: str
+    title: str | None = None
+
+
+@dataclass
+class PlaylistInfo:
+    playlist_id: str
+    title: str
+    items: list[PlaylistItem]
+
+
+def fetch_playlist(playlist_id: str) -> PlaylistInfo:
+    options = {
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": "in_playlist",
+    }
+    with yt_dlp.YoutubeDL(options) as ydl:
+        info = ydl.extract_info(
+            _PLAYLIST_URL.format(playlist_id=playlist_id), download=False
+        )
+
+    items: list[PlaylistItem] = []
+    for entry in info.get("entries") or []:
+        video_id = entry.get("id")
+        if not video_id:
+            continue
+        items.append(PlaylistItem(youtube_video_id=video_id, title=entry.get("title")))
+
+    return PlaylistInfo(
+        playlist_id=playlist_id,
+        title=info.get("title") or playlist_id,
+        items=items,
+    )
 
 
 def fetch_metadata(video_id: str) -> dict:
