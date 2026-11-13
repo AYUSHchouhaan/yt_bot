@@ -3,110 +3,33 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from app.auth.deps import DbUserDep, SessionDep
 from app.config import settings
 from app.models import Chat, Message, Playlist, Video
-from app.services.chat_graph import (
-    _psycopg_url,
+from app.schemas.chat_detail import ChatDetail
+from app.schemas.chat_request import ChatRequest
+from app.schemas.chat_response import ChatResponse
+from app.schemas.chat_summary import ChatSummary
+from app.schemas.library import LibraryOut
+from app.schemas.message_out import MessageOut
+from app.schemas.playlist_out import PlaylistOut
+from app.schemas.video_out import VideoOut
+from app.services.chat import (
     build_compiled_graph,
     create_checkpointer_conn,
+    psycopg_url,
 )
 
 router = APIRouter(tags=["chat"])
-
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-
-
-class ScopeBody(BaseModel):
-    kind: str = "library"
-    id: int | None = None
-
-
-class ChatRequest(BaseModel):
-    message: str
-    chat_id: int | None = None
-    scope: ScopeBody = ScopeBody()
-
-
-class CitationOut(BaseModel):
-    youtube_id: str | None = None
-    title: str | None = None
-    start_s: float
-    score: float | None = None
-
-
-class ChatResponse(BaseModel):
-    chat_id: int
-    answer: str
-    citations: list[CitationOut]
-
-
-class ChatSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    title: str | None
-    video_id: int | None
-    playlist_id: int | None
-
-
-class MessageOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    role: str
-    content: str
-    citations: list[dict[str, Any]] | None
-
-
-class ChatDetail(BaseModel):
-    id: int
-    title: str | None
-    video_id: int | None
-    playlist_id: int | None
-    messages: list[MessageOut]
-
-
-class VideoOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    youtube_video_id: str
-    title: str | None
-    status: str
-    playlist_id: int | None
-
-
-class PlaylistOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    youtube_playlist_id: str
-    title: str
-    item_count: int
-
-
-class LibraryOut(BaseModel):
-    videos: list[VideoOut]
-    playlists: list[PlaylistOut]
-
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def send_message(
     body: ChatRequest, user: DbUserDep, session: SessionDep
 ) -> ChatResponse:
-    scope_dict: dict[str, Any] = {"kind": body.scope.kind, "id": body.scope.id}
+    scope: dict[str, Any] = {"kind": body.scope.kind, "id": body.scope.id}
 
     if body.chat_id:
         chat = (
@@ -134,19 +57,19 @@ async def send_message(
     await session.flush()
     await session.commit()
 
-    conn = await create_checkpointer_conn(_psycopg_url(settings.database_url))
+    conn = await create_checkpointer_conn(psycopg_url(settings.database_url))
     try:
         checkpointer = AsyncPostgresSaver(conn)
         await checkpointer.setup()
         graph = await build_compiled_graph(
-            session, user.id, scope_dict, checkpointer=checkpointer
+            session, user.id, scope, checkpointer=checkpointer
         )
         config: dict[str, Any] = {"configurable": {"thread_id": str(chat.id)}}
         result = await graph.ainvoke(
             {
                 "messages": [HumanMessage(content=body.message)],
                 "query": body.message,
-                "scope": scope_dict,
+                "scope": scope,
                 "user_id": user.id,
                 "chat_id": chat.id,
                 "context": [],
@@ -171,17 +94,13 @@ async def send_message(
     )
     await session.commit()
 
-    return ChatResponse(
-        chat_id=chat.id, answer=answer, citations=citations
-    )
+    return ChatResponse(chat_id=chat.id, answer=answer, citations=citations)
 
 
 @router.get("/chats", response_model=list[ChatSummary])
 async def list_chats(user: DbUserDep, session: SessionDep) -> list[Chat]:
     result = await session.execute(
-        select(Chat)
-        .where(Chat.user_id == user.id)
-        .order_by(Chat.id.desc())
+        select(Chat).where(Chat.user_id == user.id).order_by(Chat.id.desc())
     )
     return list(result.scalars().all())
 
@@ -200,9 +119,7 @@ async def get_chat(chat_id: int, user: DbUserDep, session: SessionDep) -> ChatDe
 
     msgs = (
         await session.execute(
-            select(Message)
-            .where(Message.chat_id == chat_id)
-            .order_by(Message.id)
+            select(Message).where(Message.chat_id == chat_id).order_by(Message.id)
         )
     ).scalars().all()
 
@@ -219,9 +136,7 @@ async def get_chat(chat_id: int, user: DbUserDep, session: SessionDep) -> ChatDe
 async def get_library(user: DbUserDep, session: SessionDep) -> LibraryOut:
     videos = (
         await session.execute(
-            select(Video)
-            .where(Video.user_id == user.id)
-            .order_by(Video.id.desc())
+            select(Video).where(Video.user_id == user.id).order_by(Video.id.desc())
         )
     ).scalars().all()
 
