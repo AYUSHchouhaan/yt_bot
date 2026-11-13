@@ -1,27 +1,16 @@
-import { useEffect } from 'react'
-import { Route, Routes, useNavigate } from 'react-router-dom'
+import { useEffect, type ReactNode } from 'react'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import Protected from './components/auth/Protected'
 import SignIn from './components/auth/SignIn'
-
-function Home() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-100">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold">yt_bot</h1>
-        <p className="mt-2 text-zinc-400">
-          You are signed in. The library and chat arrive in later steps.
-        </p>
-      </div>
-    </main>
-  )
-}
+import Chat from './routes/Chat'
+import Ingest from './routes/Ingest'
 
 function AuthCallback() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/', { replace: true }), 800)
+    const timer = setTimeout(() => navigate('/ingest', { replace: true }), 800)
     return () => clearTimeout(timer)
   }, [navigate])
 
@@ -32,19 +21,33 @@ function AuthCallback() {
   )
 }
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  return <Protected>{children}</Protected>
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/signin" element={<SignIn />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route
-        path="*"
+        path="/ingest"
         element={
-          <Protected>
-            <Home />
-          </Protected>
+          <ProtectedRoute>
+            <Ingest />
+          </ProtectedRoute>
         }
       />
+      <Route
+        path="/c/:chatId"
+        element={
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/ingest" replace />} />
+      <Route path="*" element={<Navigate to="/ingest" replace />} />
     </Routes>
   )
 }
