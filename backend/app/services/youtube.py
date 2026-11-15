@@ -3,13 +3,17 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+import time
 
 import yt_dlp
 from youtube_transcript_api import (
+    CouldNotRetrieveTranscript,
     NoTranscriptFound,
     TranscriptsDisabled,
     YouTubeTranscriptApi,
 )
+
+from app.config import settings
 
 _VIDEO_URL = "https://www.youtube.com/watch?v={video_id}"
 _PLAYLIST_URL = "https://www.youtube.com/playlist?list={playlist_id}"
@@ -52,14 +56,26 @@ class PlaylistInfo:
     items: list[PlaylistItem]
 
 
-def fetch_playlist(playlist_id: str) -> PlaylistInfo:
-    options = {
+_DEFAULT_LANGUAGES = ["en", "en-US", "en-GB"]
+_IMMEDIATE_FALLBACK = (NoTranscriptFound, TranscriptsDisabled)
+
+
+def _ydl_options(**extra: object) -> dict[str, object]:
+    options: dict[str, object] = {
         "skip_download": True,
         "quiet": True,
         "no_warnings": True,
-        "extract_flat": "in_playlist",
+        "retries": 3,
+        "fragment_retries": 3,
+        "socket_timeout": 20,
     }
-    with yt_dlp.YoutubeDL(options) as ydl:
+    if settings.yt_proxy_url:
+        options["proxy"] = settings.yt_proxy_url
+    return {**options, **extra}
+
+
+def fetch_playlist(playlist_id: str) -> PlaylistInfo:
+    with yt_dlp.YoutubeDL(_ydl_options(extract_flat="in_playlist")) as ydl:
         info = ydl.extract_info(
             _PLAYLIST_URL.format(playlist_id=playlist_id), download=False
         )
@@ -79,8 +95,7 @@ def fetch_playlist(playlist_id: str) -> PlaylistInfo:
 
 
 def fetch_metadata(video_id: str) -> dict:
-    options = {"skip_download": True, "quiet": True, "no_warnings": True}
-    with yt_dlp.YoutubeDL(options) as ydl:
+    with yt_dlp.YoutubeDL(_ydl_options()) as ydl:
         info = ydl.extract_info(_VIDEO_URL.format(video_id=video_id), download=False)
     return {
         "video_id": video_id,
@@ -94,21 +109,30 @@ def fetch_metadata(video_id: str) -> dict:
 def fetch_transcript(
     video_id: str, languages: list[str] | None = None
 ) -> tuple[list[Cue], str]:
-    languages = languages or ["en"]
-    try:
-        fetched = YouTubeTranscriptApi().fetch(video_id, languages=languages)
-    except (NoTranscriptFound, TranscriptsDisabled):
-        return _fetch_auto_captions(video_id, languages), "auto_captions"
+    languages = languages or _DEFAULT_LANGUAGES
+    last_error: Exception | None = None
 
-    cues = [
-        Cue(
-            start=float(snippet.start),
-            end=float(snippet.start) + float(snippet.duration),
-            text=snippet.text,
-        )
-        for snippet in fetched.snippets
-    ]
-    return cues, "captions"
+    for attempt in range(2):
+        try:
+            fetched = YouTubeTranscriptApi().fetch(video_id, languages=languages)
+        except CouldNotRetrieveTranscript as exc:
+            last_error = exc
+            if isinstance(exc, _IMMEDIATE_FALLBACK) or attempt == 1:
+                break
+            time.sleep(1.0)
+            continue
+
+        cues = [
+            Cue(
+                start=float(snippet.start),
+                end=float(snippet.start) + float(snippet.duration),
+                text=snippet.text,
+            )
+            for snippet in fetched.snippets
+        ]
+        return cues, "captions"
+
+    return _fetch_auto_captions(video_id, languages, last_error), "auto_captions"
 
 
 def clean_cues(cues: list[Cue], source: str = "captions") -> list[Cue]:
@@ -151,24 +175,24 @@ def parse_vtt(content: str) -> list[Cue]:
     return cues
 
 
-def _fetch_auto_captions(video_id: str, languages: list[str]) -> list[Cue]:
+def _fetch_auto_captions(
+    video_id: str, languages: list[str], cause: Exception | None = None
+) -> list[Cue]:
     with tempfile.TemporaryDirectory() as tmp:
-        options = {
-            "skip_download": True,
-            "quiet": True,
-            "no_warnings": True,
-            "writesubtitles": False,
-            "writeautomaticsub": True,
-            "subtitleslangs": languages,
-            "subtitlesformat": "vtt",
-            "outtmpl": str(Path(tmp) / "%(id)s.%(ext)s"),
-        }
+        options = _ydl_options(
+            writesubtitles=False,
+            writeautomaticsub=True,
+            subtitleslangs=languages,
+            subtitlesformat="vtt",
+            outtmpl=str(Path(tmp) / "%(id)s.%(ext)s"),
+        )
         with yt_dlp.YoutubeDL(options) as ydl:
             ydl.download([_VIDEO_URL.format(video_id=video_id)])
 
         vtt_files = sorted(Path(tmp).glob("*.vtt"))
         if not vtt_files:
-            raise RuntimeError(f"No transcript available for video {video_id}")
+            detail = f": {cause}" if cause else ""
+            raise RuntimeError(f"No transcript available for video {video_id}{detail}")
         return parse_vtt(vtt_files[0].read_text(encoding="utf-8"))
 
 
