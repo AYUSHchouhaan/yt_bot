@@ -1,13 +1,36 @@
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+
 import { supabase } from '../../lib/supabase'
 
 export default function SignIn() {
-  async function handleSignIn() {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [error, setError] = useState<string | null>(null)
+
+  const from =
+    (location.state as { from?: string } | null)?.from ?? '/ingest'
+
+  useEffect(() => {
+    let active = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (active && data.session) navigate(from, { replace: true })
     })
+    return () => {
+      active = false
+    }
+  }, [from, navigate])
+
+  async function handleSignIn() {
+    setError(null)
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(from)}`
+
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    })
+
+    if (oauthError) setError(oauthError.message)
   }
 
   return (
@@ -25,6 +48,7 @@ export default function SignIn() {
         >
           Continue with Google
         </button>
+        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
     </main>
   )
