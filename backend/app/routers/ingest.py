@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 _PLAYLIST_CONCURRENCY = 3
+_PLAYLIST_ENUMERATION_TIMEOUT_S = 180
 
 
 class IngestRequest(BaseModel):
@@ -125,7 +126,10 @@ async def create_playlist_ingest(
         )
 
     try:
-        info = await run_in_threadpool(fetch_playlist, playlist_youtube_id)
+        info = await asyncio.wait_for(
+            run_in_threadpool(fetch_playlist, playlist_youtube_id),
+            timeout=_PLAYLIST_ENUMERATION_TIMEOUT_S,
+        )
     except Exception as exc:
         logger.exception("Failed to enumerate playlist %s", playlist_youtube_id)
         raise HTTPException(
