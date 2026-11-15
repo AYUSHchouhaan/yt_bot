@@ -1,0 +1,193 @@
+/* App design-system extract from monitoryt.com/app (feed + channels), captured 2026-11-14.
+   Tailwind v4 build. Theme tokens, component layer, keyframes and the custom utilities
+   used by the app shell are preserved; standard Tailwind utilities are omitted.
+   Computed border widths render ~2.4px where 2.5px is authored (device rounding). */
+
+@layer theme {
+  :root, :host {
+    --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-hand: "Shantell Sans", ui-rounded, cursive;
+
+    --color-paper: #fbf3e4;
+    --color-paper-deep: #f3e4c6;
+    --color-ink: #1b1712;
+    --color-ink-soft: #5a5044;
+    --color-ink-mute: #8a7d6a;
+    --color-red: #ff3b2f;
+    --color-red-deep: #d52817;
+    --color-yellow: #ffce4a;
+    --color-teal: #36c2ad;
+    --color-sky: #74a7ff;
+    --color-coral: #ff9e86;
+
+    --shadow-nb: 4px 4px 0 var(--color-ink);
+    --shadow-nb-sm: 3px 3px 0 var(--color-ink);
+  }
+}
+
+@layer base {
+  html { color-scheme: light; background: var(--color-paper); color: var(--color-ink); }
+  body {
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizelegibility;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 800;
+  }
+}
+
+@layer components {
+  .nb-card {
+    border: 2.5px solid var(--color-ink);
+    box-shadow: var(--shadow-nb);
+    background: rgb(255, 255, 255);
+    border-radius: 16px;
+  }
+
+  .nb-btn {
+    font-family: var(--font-display);
+    border: 2.5px solid var(--color-ink);
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 999px;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    transition: transform 0.1s, box-shadow 0.1s, background 0.12s;
+    display: inline-flex;
+  }
+  .nb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .nb-btn-primary {
+    background: var(--color-red);
+    color: rgb(255, 255, 255);
+    box-shadow: var(--shadow-nb);
+  }
+  .nb-btn-primary:not(:disabled):hover {
+    box-shadow: 6px 6px 0 var(--color-ink);
+    transform: translate(-2px, -2px);
+  }
+  .nb-btn-primary:not(:disabled):active {
+    box-shadow: 2px 2px 0 var(--color-ink);
+    transform: translate(2px, 2px);
+  }
+
+  .nb-btn-ghost {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    box-shadow: var(--shadow-nb-sm);
+  }
+  .nb-btn-ghost:not(:disabled):hover {
+    background: rgb(255, 255, 255);
+    transform: translate(-1px, -1px);
+  }
+
+  .nb-input {
+    border: 2.5px solid var(--color-ink);
+    width: 100%;
+    color: var(--color-ink);
+    box-shadow: var(--shadow-nb-sm);
+    background: rgb(255, 255, 255);
+    border-radius: 12px;
+    padding: 0px 16px;
+    font-size: 15px;
+  }
+  .nb-input::placeholder { color: var(--color-ink-mute); }
+  .nb-input:focus { box-shadow: var(--shadow-nb); outline: none; }
+  .nb-input:disabled { opacity: 0.5; cursor: not-allowed; background: var(--color-paper); }
+
+  .nb-tag {
+    font-family: var(--font-display);
+    letter-spacing: 0.06em;
+    border: 2px solid var(--color-ink);
+    background: var(--color-paper);
+    border-radius: 6px;
+    align-items: center;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+  }
+
+  .nb-chip {
+    font-family: var(--font-display);
+    letter-spacing: 0.04em;
+    border: 2px solid var(--color-ink);
+    border-radius: 999px;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-flex;
+  }
+
+  .nb-range {
+    appearance: none;
+    pointer-events: none;
+    background: 0px 0px;
+    margin: 0px;
+  }
+  .nb-range::-webkit-slider-thumb {
+    appearance: none;
+    pointer-events: auto;
+    border: 2.5px solid var(--color-ink);
+    width: 20px;
+    height: 20px;
+    box-shadow: var(--shadow-nb-sm);
+    cursor: grab;
+    background: rgb(255, 255, 255);
+    border-radius: 999px;
+  }
+  .nb-range::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    background: var(--color-yellow);
+  }
+  .nb-range:focus { outline: none; }
+  .nb-range:focus-visible::-webkit-slider-thumb {
+    background: var(--color-yellow);
+    box-shadow: var(--shadow-nb);
+  }
+
+  .nb-skel {
+    border: 2.5px solid var(--color-ink);
+    background-size: 200% 100%;
+    border-radius: 12px;
+    animation: 1.3s linear 0s infinite normal none running nb-shimmer;
+  }
+  .nb-skel-plain { border-width: medium; border-style: none; border-color: currentcolor; border-image: none; border-radius: 8px; }
+}
+
+@keyframes nb-shimmer {
+  0% { background-position: 200% 0px; }
+  100% { background-position: -200% 0px; }
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-skel { animation: auto ease 0s 1 normal none running none; }
+}
+
+.bg-paper-grid {
+  background-color: var(--color-paper);
+  background-image: radial-gradient(circle at 1px 1px, rgba(27, 23, 18, 0.08) 1px, rgba(0, 0, 0, 0) 0px);
+  background-size: 22px 22px;
+}
+
+.font-display { font-family: var(--font-display); }
+.font-hand { font-family: var(--font-hand); }
+
+.shadow-nb-lg { box-shadow: 7px 7px 0 var(--color-ink); }
+.shadow-nb-sm { box-shadow: 3px 3px 0 var(--color-ink); }
