@@ -1,0 +1,22 @@
+/* All :hover rules in the monitoryt.com home page stylesheet (8 total), 2026-11-14.
+   Resting states live in site.css; this file is the complete hover layer. */
+
+.btn-primary:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--ink); }
+
+.btn-ghost:hover { transform: translate(-1px, -1px); background: rgb(255, 255, 255); }
+
+.btn-link:hover { text-decoration: underline wavy var(--red) 2px; text-underline-offset: 4px; }
+
+.note:hover { transform: rotate(0deg) scale(1.015); }
+
+.catch:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 var(--ink); }
+
+.persona:hover { transform: rotate(-1.5deg); background: rgba(251, 243, 228, 0.08); }
+
+.foot-col a:hover { color: var(--ink); text-decoration: underline wavy var(--red) 2px; text-underline-offset: 4px; }
+
+.foot-bottom a:hover { text-decoration: underline wavy var(--red) 2px; text-underline-offset: 4px; }
+
+/* Related pressed state (not :hover, included for completeness). */
+
+.btn-primary:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
