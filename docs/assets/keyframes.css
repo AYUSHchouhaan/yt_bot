@@ -1,0 +1,10 @@
+/* All @keyframes rules found on the monitoryt.com home page (2 total), 2026-11-14. */
+
+@keyframes marquee {
+  0% { transform: translateX(0px); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes rise {
+  100% { opacity: 1; transform: translateY(0px); }
+}
