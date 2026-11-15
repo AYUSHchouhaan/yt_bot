@@ -87,20 +87,34 @@ export default function ScopeSelector({
               Videos
             </div>
           )}
-          {readyVideos.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => {
-                onChange({ kind: 'video', id: v.id })
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
-            >
-              <Video className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-              <span className="truncate">{v.title ?? v.youtube_video_id}</span>
-            </button>
-          ))}
+          {readyVideos.map((v) => {
+            const parent = v.playlist_id
+              ? library?.playlists.find((p) => p.id === v.playlist_id)
+              : null
+            return (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => {
+                  onChange({ kind: 'video', id: v.id })
+                  setOpen(false)
+                }}
+                className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-800"
+              >
+                <Video className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">
+                    {v.title ?? v.youtube_video_id}
+                  </span>
+                  {parent && (
+                    <span className="block truncate text-xs text-zinc-500">
+                      {parent.title}
+                    </span>
+                  )}
+                </span>
+              </button>
+            )
+          })}
 
           {readyPlaylists.length > 0 && (
             <div className="px-3 pt-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
