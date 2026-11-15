@@ -25,9 +25,14 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    throw new Error(
-      `API request failed: ${response.status} ${response.statusText}`,
-    )
+    let detail = `API request failed: ${response.status} ${response.statusText}`
+    const payload = (await response
+      .json()
+      .catch(() => null)) as { detail?: unknown } | null
+    if (payload && typeof payload.detail === 'string' && payload.detail) {
+      detail = payload.detail
+    }
+    throw new Error(detail)
   }
 
   if (response.status === 204) {
