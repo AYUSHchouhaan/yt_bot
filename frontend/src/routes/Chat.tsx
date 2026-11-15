@@ -104,9 +104,13 @@ export default function Chat() {
         queryClient.invalidateQueries({ queryKey: ['chats'] })
         navigate(`/c/${res.chat_id}`, { replace: true })
       }
-    } catch {
+    } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== userMessage.id))
-      setError('Something went wrong. Please try again.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong. Please try again.',
+      )
     } finally {
       setThinking(false)
     }
