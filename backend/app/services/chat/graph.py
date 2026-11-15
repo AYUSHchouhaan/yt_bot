@@ -20,6 +20,7 @@ async def build_compiled_graph(
     *,
     checkpointer: Any,
     llm: Any | None = None,
+    resolved: tuple[int | None, int | None] | None = None,
 ) -> Any:
     """Build a compiled LangGraph agent with the RAG tool.
 
@@ -27,7 +28,10 @@ async def build_compiled_graph(
     the LLM only emits a query string.  ``checkpointer`` must be supplied by
     the caller so it can manage the connection lifecycle.
     """
-    video_id, playlist_id = await resolve_scope(session, user_id, scope)
+    if resolved is None:
+        video_id, playlist_id = await resolve_scope(session, user_id, scope)
+    else:
+        video_id, playlist_id = resolved
     rag_tool = RagSearchTool(session, user_id, video_id, playlist_id)
 
     if llm is None:
