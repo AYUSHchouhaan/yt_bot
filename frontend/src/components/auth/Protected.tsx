@@ -34,7 +34,13 @@ export default function Protected({ children }: { children: ReactNode }) {
 
   if (!ready) return null
   if (!session) {
-    return <Navigate to="/signin" replace state={{ from: location.pathname }} />
+    return (
+      <Navigate
+        to="/signin"
+        replace
+        state={{ from: location.pathname + location.search }}
+      />
+    )
   }
 
   return <>{children}</>
