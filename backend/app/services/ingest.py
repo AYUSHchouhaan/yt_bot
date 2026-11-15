@@ -1,8 +1,10 @@
+import asyncio
 import logging
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.models import Chunk, Video
@@ -13,6 +15,9 @@ from app.services.youtube import clean_cues, fetch_metadata, fetch_transcript
 logger = logging.getLogger(__name__)
 
 _MAX_ERROR_LEN = 2000
+_METADATA_TIMEOUT_S = 90
+_TRANSCRIPT_TIMEOUT_S = 180
+_EMBEDDING_TIMEOUT_S = 300
 
 
 async def ingest_video(video_id: int, user_id: int, session: AsyncSession) -> None:
@@ -26,8 +31,14 @@ async def ingest_video(video_id: int, user_id: int, session: AsyncSession) -> No
         video.status = "fetching"
         await session.commit()
 
-        meta = fetch_metadata(video.youtube_video_id)
-        cues, source = fetch_transcript(video.youtube_video_id)
+        meta = await asyncio.wait_for(
+            run_in_threadpool(fetch_metadata, video.youtube_video_id),
+            timeout=_METADATA_TIMEOUT_S,
+        )
+        cues, source = await asyncio.wait_for(
+            run_in_threadpool(fetch_transcript, video.youtube_video_id),
+            timeout=_TRANSCRIPT_TIMEOUT_S,
+        )
         cues = clean_cues(cues, source)
 
         video.title = meta["title"]
@@ -48,7 +59,14 @@ async def ingest_video(video_id: int, user_id: int, session: AsyncSession) -> No
         await session.execute(delete(Chunk).where(Chunk.video_id == video_id))
 
         texts = [chunk.text for chunk in chunks]
-        embeddings = embed_texts(texts) if texts else []
+        embeddings = (
+            await asyncio.wait_for(
+                run_in_threadpool(embed_texts, texts),
+                timeout=_EMBEDDING_TIMEOUT_S,
+            )
+            if texts
+            else []
+        )
 
         rows = [
             {
