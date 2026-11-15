@@ -21,6 +21,7 @@ from app.services.chat import (
     create_checkpointer_conn,
     psycopg_url,
 )
+from app.services.retrieval import ScopeError, resolve_scope
 
 router = APIRouter(tags=["chat"])
 
@@ -30,6 +31,14 @@ async def send_message(
     body: ChatRequest, user: DbUserDep, session: SessionDep
 ) -> ChatResponse:
     scope: dict[str, Any] = {"kind": body.scope.kind, "id": body.scope.id}
+
+    try:
+        resolved = await resolve_scope(session, user.id, scope)
+    except ScopeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
     if body.chat_id:
         chat = (
@@ -62,7 +71,11 @@ async def send_message(
         checkpointer = AsyncPostgresSaver(conn)
         await checkpointer.setup()
         graph = await build_compiled_graph(
-            session, user.id, scope, checkpointer=checkpointer
+            session,
+            user.id,
+            scope,
+            checkpointer=checkpointer,
+            resolved=resolved,
         )
         config: dict[str, Any] = {"configurable": {"thread_id": str(chat.id)}}
         result = await graph.ainvoke(
