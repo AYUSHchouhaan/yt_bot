@@ -51,7 +51,7 @@ async def _seed_video(
     return video
 
 
-async def test_resolve_scope_rejects_video_inside_playlist(
+async def test_resolve_scope_allows_video_inside_playlist(
     db_session: AsyncSession,
 ) -> None:
     user = await _seed_user(db_session, "scope-user-1")
@@ -64,13 +64,52 @@ async def test_resolve_scope_rejects_video_inside_playlist(
         db_session, user, "vid00000001", ["hello world"], playlist
     )
 
-    with pytest.raises(ScopeError):
-        await resolve_scope(db_session, user.id, {"kind": "video", "id": video.id})
-
     video_id, playlist_id = await resolve_scope(
+        db_session, user.id, {"kind": "video", "id": video.id}
+    )
+    assert (video_id, playlist_id) == (video.id, None)
+
+    pl_video_id, pl_playlist_id = await resolve_scope(
         db_session, user.id, {"kind": "playlist", "id": playlist.id}
     )
-    assert (video_id, playlist_id) == (None, playlist.id)
+    assert (pl_video_id, pl_playlist_id) == (None, playlist.id)
+
+
+async def test_video_scope_inside_playlist_retrieves_only_that_video(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "app.services.retrieval.embed_query", lambda query: _EMBEDDING
+    )
+
+    user = await _seed_user(db_session, "scope-user-6")
+    playlist = Playlist(
+        user_id=user.id, youtube_playlist_id="PL6", title="P6", item_count=2
+    )
+    db_session.add(playlist)
+    await db_session.flush()
+
+    target = await _seed_video(
+        db_session,
+        user,
+        "plvid00001",
+        ["quantum physics in lecture one"],
+        playlist,
+    )
+    await _seed_video(
+        db_session,
+        user,
+        "plvid00002",
+        ["quantum physics in lecture two"],
+        playlist,
+    )
+
+    hits = await hybrid_search(
+        db_session, "quantum physics", user_id=user.id, video_id=target.id
+    )
+
+    assert hits
+    assert all(hit["video_id"] == target.id for hit in hits)
 
 
 async def test_resolve_scope_video_outside_playlist(db_session: AsyncSession) -> None:
