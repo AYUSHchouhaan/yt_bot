@@ -18,9 +18,8 @@ async def resolve_scope(
 ) -> tuple[int | None, int | None]:
     """Map a chat scope to a single retrieval filter.
 
-    Video and playlist scopes are mutually exclusive by design: a video that
-    belongs to a playlist is queried through the playlist scope, never by its
-    own id, so the two kinds of content never mix in one answer.
+    A video scope narrows retrieval to that video even when it belongs to a
+    playlist; a playlist scope covers every video in the playlist.
     """
     kind: ScopeKind = scope.get("kind", "library")
     scope_id = scope.get("id")
@@ -40,10 +39,6 @@ async def resolve_scope(
         ).scalar_one_or_none()
         if video is None:
             raise ScopeError(f"Video {scope_id} not found")
-        if video.playlist_id is not None:
-            raise ScopeError(
-                "Video belongs to a playlist; use playlist scope instead"
-            )
         return video.id, None
 
     if kind == "playlist":
