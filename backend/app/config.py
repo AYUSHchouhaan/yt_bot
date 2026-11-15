@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_jwks_url: str = ""
     supabase_jwt_secret: str = ""
+    yt_proxy_url: str = ""
 
 
 settings = Settings()
