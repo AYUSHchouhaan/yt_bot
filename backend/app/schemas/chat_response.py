@@ -4,7 +4,7 @@ from app.schemas.citation import Citation
 
 
 class ChatResponse(BaseModel):
-    chat_id: int
+    chat_id: str
     answer: str
     citations: list[Citation]
 
