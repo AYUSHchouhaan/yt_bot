@@ -4,7 +4,7 @@ from app.schemas.message_out import MessageOut
 
 
 class ChatDetail(BaseModel):
-    id: int
+    id: str
     title: str | None
     video_id: int | None
     playlist_id: int | None
