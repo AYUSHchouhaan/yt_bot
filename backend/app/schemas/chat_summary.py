@@ -1,10 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class ChatSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+    id: str
     title: str | None
     video_id: int | None
     playlist_id: int | None
