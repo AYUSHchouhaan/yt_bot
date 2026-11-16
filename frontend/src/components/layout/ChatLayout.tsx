@@ -1,65 +1,92 @@
-import { useState } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Outlet } from 'react-router-dom'
 import { PanelLeft } from 'lucide-react'
 
 import ChatSidebar from './ChatSidebar'
+import ChatComposer from '../chat/ChatComposer'
+import { ChatSessionProvider } from '../chat/ChatSessionContext'
+import { useChatSession } from '../chat/chatSessionStore'
 
-export default function ChatLayout() {
-  const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed'>(() =>
-    window.matchMedia('(min-width: 768px)').matches
-      ? 'expanded'
-      : 'collapsed',
-  )
-  const { chatId } = useParams<{ chatId: string }>()
-  const expanded = sidebarState === 'expanded'
+function ChatLayoutContent({
+  expanded,
+  onToggleSidebar,
+  onCloseSidebar,
+}: {
+  expanded: boolean
+  onToggleSidebar: () => void
+  onCloseSidebar: () => void
+}) {
+  const { activeChatId } = useChatSession()
 
   return (
-    <div className="relative mx-0 flex h-full">
-      {/* Floating sidebar panel */}
+    <div className="chat-layout">
       <aside
+        id="chat-sidebar"
         aria-label="Chat list"
-        className={`absolute bottom-3 left-3 top-3 z-30 flex flex-col overflow-hidden rounded-2xl bg-zinc-900 shadow-lg transition-all duration-300 ease-in-out ${
-          expanded
-            ? 'w-64 opacity-100 ring-1 ring-zinc-800'
-            : 'w-0 opacity-0 ring-0'
-        }`}
+        aria-hidden={!expanded}
+        inert={!expanded}
+        className={`chat-sidebar ${expanded ? 'is-open' : ''}`}
       >
-        <div className="flex h-full w-64 flex-col">
-          <ChatSidebar
-            currentChatId={chatId}
-            onNavigate={() => setSidebarState('collapsed')}
-          />
+        <div className="chat-sidebar__inner">
+          <ChatSidebar currentChatId={activeChatId ?? undefined} onNavigate={onCloseSidebar} />
         </div>
       </aside>
 
-      {/* Mobile scrim */}
       {expanded && (
-        <div
-          className="absolute inset-0 z-20 bg-black/60 md:hidden"
-          onClick={() => setSidebarState('collapsed')}
+        <button
+          type="button"
+          className="chat-scrim"
+          aria-label="Close chat sidebar"
+          tabIndex={-1}
+          onClick={onCloseSidebar}
         />
       )}
 
-      {/* Floating trigger — always above everything */}
       <button
         type="button"
-        onClick={() =>
-          setSidebarState(expanded ? 'collapsed' : 'expanded')
-        }
-        aria-label="Toggle sidebar"
-        className="absolute left-3 top-4 z-50 flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+        onClick={onToggleSidebar}
+        aria-label="Toggle chat sidebar"
+        aria-expanded={expanded}
+        aria-controls="chat-sidebar"
+        className="chat-trigger"
       >
-        <PanelLeft className="h-4 w-4" />
+        <PanelLeft className="h-4 w-4" aria-hidden="true" />
       </button>
 
-      {/* Main column */}
-      <div
-        className={`relative flex min-w-0 flex-1 flex-col transition-all duration-300 ${
-          expanded ? 'md:ml-64' : ''
-        }`}
-      >
-        <Outlet />
+      <div className={`chat-main ${expanded ? 'is-expanded' : ''}`}>
+        <div className="chat-transcript">
+          <Outlet />
+        </div>
+        <ChatComposer />
       </div>
     </div>
+  )
+}
+
+export default function ChatLayout() {
+  const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed'>(() =>
+    window.matchMedia('(min-width: 768px)').matches ? 'expanded' : 'collapsed',
+  )
+  const expanded = sidebarState === 'expanded'
+
+  useEffect(() => {
+    if (!expanded) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSidebarState('collapsed')
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [expanded])
+
+  return (
+    <ChatSessionProvider>
+      <ChatLayoutContent
+        expanded={expanded}
+        onToggleSidebar={() => setSidebarState(expanded ? 'collapsed' : 'expanded')}
+        onCloseSidebar={() => setSidebarState('collapsed')}
+      />
+    </ChatSessionProvider>
   )
 }
