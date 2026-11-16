@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -7,13 +8,13 @@ from httpx import AsyncClient
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db import engine
-from app.models import AppUser, Chunk, Playlist, Video
+from app.db import SessionLocal, engine
+from app.models import AppUser, Chat, Chunk, Playlist, Video
 from app.services.chat import (
     build_compiled_graph,
     create_checkpointer_conn,
@@ -371,6 +372,7 @@ async def test_citations_and_messages_rows(
     assert response.status_code == 200
     body = response.json()
     chat_id = body["chat_id"]
+    assert re.fullmatch(r"\d{18,24}", chat_id), "chat_id must be a random slug"
     assert body["answer"]
     assert body["citations"]
     assert body["citations"][0]["youtube_id"] == "vid00000001"
@@ -383,18 +385,25 @@ async def test_citations_and_messages_rows(
     assert msgs[1]["role"] == "assistant"
     assert msgs[1]["citations"]
 
+    # thread_id is the int PK; the API only exposes the slug.
+    async with SessionLocal() as session:
+        chat_row = (
+            await session.execute(select(Chat).where(Chat.slug == chat_id))
+        ).scalar_one()
+        thread_pk = str(chat_row.id)
+
     async with engine.begin() as conn:
         await conn.execute(
             sa_text("DELETE FROM checkpoint_writes WHERE thread_id = :tid"),
-            {"tid": str(chat_id)},
+            {"tid": thread_pk},
         )
         await conn.execute(
             sa_text("DELETE FROM checkpoint_blobs WHERE thread_id = :tid"),
-            {"tid": str(chat_id)},
+            {"tid": thread_pk},
         )
         await conn.execute(
             sa_text("DELETE FROM checkpoints WHERE thread_id = :tid"),
-            {"tid": str(chat_id)},
+            {"tid": thread_pk},
         )
 
 
