@@ -9,7 +9,7 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null)
 
   const from =
-    (location.state as { from?: string } | null)?.from ?? '/ingest'
+    (location.state as { from?: string } | null)?.from ?? '/c/new'
 
   useEffect(() => {
     let active = true
