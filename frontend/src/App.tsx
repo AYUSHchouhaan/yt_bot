@@ -10,8 +10,11 @@ import {
 
 import Protected from './components/auth/Protected'
 import SignIn from './components/auth/SignIn'
+import AppLayout from './components/layout/AppLayout'
+import ChatLayout from './components/layout/ChatLayout'
 import Chat from './routes/Chat'
 import Ingest from './routes/Ingest'
+import Landing from './routes/Landing'
 import { supabase } from './lib/supabase'
 
 const SIGN_IN_TIMEOUT_MS = 15_000
@@ -22,7 +25,7 @@ function AuthCallback() {
   const [error, setError] = useState<string | null>(null)
 
   const nextParam = searchParams.get('next')
-  const next = nextParam && nextParam.startsWith('/') ? nextParam : '/ingest'
+  const next = nextParam && nextParam.startsWith('/') ? nextParam : '/c/new'
 
   useEffect(() => {
     let active = true
@@ -102,26 +105,23 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/signin" element={<SignIn />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route
-        path="/ingest"
         element={
           <ProtectedRoute>
-            <Ingest />
+            <AppLayout />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/c/:chatId"
-        element={
-          <ProtectedRoute>
-            <Chat />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/ingest" replace />} />
-      <Route path="*" element={<Navigate to="/ingest" replace />} />
+      >
+        <Route path="/ingest" element={<Ingest />} />
+        <Route element={<ChatLayout />}>
+          <Route path="/c/new" element={<Chat />} />
+          <Route path="/c/:chatId" element={<Chat />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
