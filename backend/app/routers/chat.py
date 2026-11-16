@@ -1,9 +1,11 @@
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.deps import DbUserDep, SessionDep
 from app.config import settings
@@ -26,6 +28,14 @@ from app.services.retrieval import ScopeError, resolve_scope
 router = APIRouter(tags=["chat"])
 
 
+def generate_slug() -> str:
+    """Random 18–24 digit numeric string, no leading zero."""
+    length = 18 + secrets.randbelow(7)
+    first = "123456789"[secrets.randbelow(9)]
+    rest = "".join(secrets.choice("0123456789") for _ in range(length - 1))
+    return first + rest
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def send_message(
     body: ChatRequest, user: DbUserDep, session: SessionDep
@@ -40,27 +50,46 @@ async def send_message(
             detail=str(exc),
         ) from exc
 
-    if body.chat_id:
+    video_id = body.scope.id if body.scope.kind == "video" else None
+    playlist_id = body.scope.id if body.scope.kind == "playlist" else None
+    creating = False
+
+    if body.chat_id is not None:
         chat = (
             await session.execute(
-                select(Chat).where(Chat.id == body.chat_id, Chat.user_id == user.id)
+                select(Chat).where(Chat.slug == body.chat_id, Chat.user_id == user.id)
             )
         ).scalar_one_or_none()
         if chat is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found"
+            # Adopt the client-generated ID instead of only auto-incrementing.
+            chat = Chat(
+                user_id=user.id,
+                video_id=video_id,
+                playlist_id=playlist_id,
+                title=body.message[:60] if body.message else None,
+                slug=body.chat_id,
             )
+            creating = True
     else:
-        video_id = body.scope.id if body.scope.kind == "video" else None
-        playlist_id = body.scope.id if body.scope.kind == "playlist" else None
         chat = Chat(
             user_id=user.id,
             video_id=video_id,
             playlist_id=playlist_id,
-            title=body.message[:100] if body.message else None,
+            title=body.message[:60] if body.message else None,
+            slug=generate_slug(),
         )
+        creating = True
+
+    if creating:
         session.add(chat)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Chat ID already taken — regenerate and retry",
+            ) from exc
 
     session.add(Message(chat_id=chat.id, role="user", content=body.message))
     await session.flush()
@@ -107,22 +136,30 @@ async def send_message(
     )
     await session.commit()
 
-    return ChatResponse(chat_id=chat.id, answer=answer, citations=citations)
+    return ChatResponse(chat_id=chat.slug, answer=answer, citations=citations)
 
 
 @router.get("/chats", response_model=list[ChatSummary])
-async def list_chats(user: DbUserDep, session: SessionDep) -> list[Chat]:
+async def list_chats(user: DbUserDep, session: SessionDep) -> list[ChatSummary]:
     result = await session.execute(
         select(Chat).where(Chat.user_id == user.id).order_by(Chat.id.desc())
     )
-    return list(result.scalars().all())
+    return [
+        ChatSummary(
+            id=c.slug,
+            title=c.title,
+            video_id=c.video_id,
+            playlist_id=c.playlist_id,
+        )
+        for c in result.scalars().all()
+    ]
 
 
 @router.get("/chats/{chat_id}", response_model=ChatDetail)
-async def get_chat(chat_id: int, user: DbUserDep, session: SessionDep) -> ChatDetail:
+async def get_chat(chat_id: str, user: DbUserDep, session: SessionDep) -> ChatDetail:
     chat = (
         await session.execute(
-            select(Chat).where(Chat.id == chat_id, Chat.user_id == user.id)
+            select(Chat).where(Chat.slug == chat_id, Chat.user_id == user.id)
         )
     ).scalar_one_or_none()
     if chat is None:
@@ -132,12 +169,12 @@ async def get_chat(chat_id: int, user: DbUserDep, session: SessionDep) -> ChatDe
 
     msgs = (
         await session.execute(
-            select(Message).where(Message.chat_id == chat_id).order_by(Message.id)
+            select(Message).where(Message.chat_id == chat.id).order_by(Message.id)
         )
     ).scalars().all()
 
     return ChatDetail(
-        id=chat.id,
+        id=chat.slug,
         title=chat.title,
         video_id=chat.video_id,
         playlist_id=chat.playlist_id,
