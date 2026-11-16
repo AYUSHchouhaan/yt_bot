@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
+import { Loader2 } from 'lucide-react'
 
 import { supabase } from '../../lib/supabase'
+import AuthPanel from './AuthPanel'
 
 export default function Protected({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -32,7 +34,21 @@ export default function Protected({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  if (!ready) return null
+  if (!ready) {
+    return (
+      <AuthPanel
+        eyebrow="checking your session"
+        title="Opening your library"
+        description="Getting your conversations and sources ready."
+      >
+        <p className="thinking justify-center" role="status">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Checking your session…
+        </p>
+      </AuthPanel>
+    )
+  }
+
   if (!session) {
     return (
       <Navigate
