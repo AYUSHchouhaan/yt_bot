@@ -14,16 +14,12 @@ export default function CitationChip({
     ? `https://youtu.be/${youtubeId}?t=${Math.floor(citation.start_s)}`
     : null
 
-  const tooltip = [
-    citation.title ?? 'Untitled',
-    formatTime(citation.start_s),
-  ].join(' • ')
-
-  const pill = (
-    <span className="inline-flex items-center gap-0.5 rounded bg-zinc-800 px-1.5 py-0.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-700 transition-colors hover:bg-zinc-700 hover:text-zinc-100">
-      [{index}]
-      <ExternalLink className="h-3 w-3" />
-    </span>
+  const tooltip = [citation.title ?? 'Untitled', formatTime(citation.start_s)].join(' • ')
+  const content = (
+    <>
+      <span>[{index}]</span>
+      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+    </>
   )
 
   if (url) {
@@ -33,16 +29,17 @@ export default function CitationChip({
         target="_blank"
         rel="noopener noreferrer"
         title={tooltip}
-        className="inline-flex"
+        aria-label={`Citation ${index}: ${tooltip}`}
+        className="citation"
       >
-        {pill}
+        {content}
       </a>
     )
   }
 
   return (
-    <span title={tooltip} className="inline-flex">
-      {pill}
+    <span title={tooltip} className="citation">
+      {content}
     </span>
   )
 }
