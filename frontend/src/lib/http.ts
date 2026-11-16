@@ -2,6 +2,15 @@ import { supabase } from './supabase'
 
 const API_BASE = '/api'
 
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -21,7 +30,7 @@ export async function apiFetch<T>(
   if (response.status === 401) {
     await supabase.auth.signOut()
     window.location.assign('/signin')
-    throw new Error('Unauthorized')
+    throw new ApiError('Unauthorized', 401)
   }
 
   if (!response.ok) {
@@ -32,7 +41,7 @@ export async function apiFetch<T>(
     if (payload && typeof payload.detail === 'string' && payload.detail) {
       detail = payload.detail
     }
-    throw new Error(detail)
+    throw new ApiError(detail, response.status)
   }
 
   if (response.status === 204) {
