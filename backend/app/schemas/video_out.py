@@ -7,6 +7,9 @@ class VideoOut(BaseModel):
     id: int
     youtube_video_id: str
     title: str | None
+    channel: str | None
+    duration_s: int | None
+    thumbnail_url: str | None
     status: str
     playlist_id: int | None
 
