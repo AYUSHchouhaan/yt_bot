@@ -1,37 +1,48 @@
-import { Link, NavLink } from 'react-router-dom'
-import { MonitorPlay } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useLocation } from 'react-router-dom'
 
-const LINKS: { to: string; label: string; end?: boolean }[] = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/c/new', label: 'New Chat' },
-  { to: '/ingest', label: 'Ingest' },
-]
+import { api, type User } from '../../lib/api'
+import Brand from '../ui/Brand'
+import { Chip } from '../ui/Chip'
 
 export default function Navbar() {
+  const { pathname, hash } = useLocation()
+  const { data: user } = useQuery<User>({ queryKey: ['me'], queryFn: api.me })
+
+  const links = [
+    { to: '/', label: 'Home', active: pathname === '/' },
+    { to: '/c/new', label: 'New chat', active: pathname.startsWith('/c/') },
+    { to: '/ingest', label: 'Ingest', active: pathname === '/ingest' && hash !== '#library' },
+    { to: '/ingest#library', label: 'Library', active: pathname === '/ingest' && hash === '#library' },
+  ]
+
+  const initials = user?.display_name
+    ? user.display_name.slice(0, 2).toUpperCase()
+    : (user?.email?.slice(0, 2).toUpperCase() ?? 'YT')
+
   return (
-    <header className="flex h-12 shrink-0 items-center gap-5 border-b border-zinc-800/60 px-4">
-      <Link to="/" className="flex items-center gap-2">
-        <MonitorPlay className="h-5 w-5 text-red-500" />
-        <span className="text-sm font-semibold text-zinc-200">yt_bot</span>
-      </Link>
-      <nav className="flex items-center gap-1">
-        {LINKS.map((link) => (
-          <NavLink
-            key={link.to}
-            to={link.to}
-            end={link.end}
-            className={({ isActive }) =>
-              `rounded-md px-3 py-1.5 text-sm transition-colors ${
-                isActive
-                  ? 'bg-zinc-800 text-zinc-100'
-                  : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-              }`
-            }
-          >
-            {link.label}
-          </NavLink>
-        ))}
-      </nav>
+    <header className="app-header">
+      <div className="app-header__inner">
+        <Brand to="/" />
+        <nav className="app-nav hidden md:flex" aria-label="App navigation">
+          {links.map((link) => (
+            <Link
+              key={link.label}
+              to={link.to}
+              className="nav-pill"
+              aria-current={link.active ? 'page' : undefined}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="ml-auto flex items-center gap-3 md:ml-0">
+          <Chip>FREE</Chip>
+          <span className="app-avatar" title={user?.display_name ?? user?.email ?? 'yt_bot user'} aria-hidden="true">
+            {user?.avatar_url ? <img src={user.avatar_url} alt="" /> : initials}
+          </span>
+        </div>
+      </div>
     </header>
   )
 }
