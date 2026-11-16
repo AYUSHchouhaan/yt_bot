@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CheckCircle2,
   Clock,
+  LibraryBig,
   Link2,
   ListVideo,
   Loader2,
@@ -11,36 +12,43 @@ import {
   XCircle,
 } from 'lucide-react'
 
-import { api, type JobStatus, type Library, type Scope } from '../lib/api'
+import { api, formatTime, type JobStatus, type Library, type Scope } from '../lib/api'
+import { Button } from '../components/ui/Button'
+import Card from '../components/ui/Card'
+import { Chip, type ChipTone } from '../components/ui/Chip'
+import EmptyState from '../components/ui/EmptyState'
+import Eyebrow from '../components/ui/Eyebrow'
+import Input from '../components/ui/Input'
 
 type IngestType = 'video' | 'playlist'
 
 const STATUS_CONFIG: Record<
   string,
-  { icon: typeof CheckCircle2; cls: string; label: string }
+  { icon: typeof CheckCircle2; tone: ChipTone; label: string }
 > = {
-  ready: { icon: CheckCircle2, cls: 'text-emerald-400', label: 'Ready' },
-  queued: { icon: Clock, cls: 'text-zinc-400', label: 'Queued' },
-  fetching: { icon: Clock, cls: 'text-amber-400', label: 'Fetching' },
-  embedding: { icon: Clock, cls: 'text-amber-400', label: 'Embedding' },
-  processing: { icon: Clock, cls: 'text-amber-400', label: 'Processing' },
-  failed: { icon: XCircle, cls: 'text-red-400', label: 'Failed' },
-  empty: { icon: Clock, cls: 'text-zinc-500', label: 'Empty' },
+  ready: { icon: CheckCircle2, tone: 'teal', label: 'Ready' },
+  queued: { icon: Clock, tone: 'paper', label: 'Queued' },
+  fetching: { icon: Clock, tone: 'yellow', label: 'Fetching' },
+  embedding: { icon: Clock, tone: 'sky', label: 'Embedding' },
+  processing: { icon: Clock, tone: 'sky', label: 'Processing' },
+  failed: { icon: XCircle, tone: 'coral', label: 'Failed' },
+  empty: { icon: Clock, tone: 'paper', label: 'Empty' },
 }
 
 function StatusBadge({ status }: { status: string }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.queued
   const Icon = config.icon
   return (
-    <span className={`inline-flex items-center gap-1 text-xs ${config.cls}`}>
-      <Icon className="h-3 w-3" />
+    <Chip tone={config.tone}>
+      <Icon aria-hidden="true" />
       {config.label}
-    </span>
+    </Chip>
   )
 }
 
 export default function Ingest() {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
 
   const [url, setUrl] = useState('')
@@ -50,10 +58,23 @@ export default function Ingest() {
   const [job, setJob] = useState<JobStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const { data: library } = useQuery<Library>({
+  const {
+    data: library,
+    isLoading: libraryLoading,
+    isError: libraryError,
+    refetch: refetchLibrary,
+  } = useQuery<Library>({
     queryKey: ['library'],
     queryFn: api.getLibrary,
   })
+
+  useEffect(() => {
+    if (location.hash !== '#library') return
+    const frame = requestAnimationFrame(() => {
+      document.getElementById('library')?.scrollIntoView({ block: 'start' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [location.hash])
 
   useEffect(() => {
     if (jobId === null) return
@@ -62,14 +83,14 @@ export default function Ingest() {
     const poll = async () => {
       while (active) {
         try {
-          const j = await api.getJob(jobId)
+          const nextJob = await api.getJob(jobId)
           if (!active) return
-          setJob(j)
-          if (j.status === 'done' || j.status === 'failed') {
+          setJob(nextJob)
+          if (nextJob.status === 'done' || nextJob.status === 'failed') {
             setJobId(null)
             queryClient.invalidateQueries({ queryKey: ['library'] })
-            if (j.status === 'failed') {
-              setError(j.error ?? 'Ingestion failed')
+            if (nextJob.status === 'failed') {
+              setError(nextJob.error ?? 'Ingestion failed')
             }
             return
           }
@@ -79,7 +100,7 @@ export default function Ingest() {
           setError('Failed to check job status')
           return
         }
-        await new Promise((r) => setTimeout(r, 2000))
+        await new Promise((resolve) => setTimeout(resolve, 2000))
       }
     }
     poll()
@@ -89,8 +110,8 @@ export default function Ingest() {
     }
   }, [jobId, queryClient])
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
     const trimmed = url.trim()
     if (!trimmed || submitting) return
 
@@ -99,19 +120,19 @@ export default function Ingest() {
     setJob(null)
 
     try {
-      const res =
+      const response =
         type === 'video'
           ? await api.ingestVideo(trimmed)
           : await api.ingestPlaylist(trimmed)
 
-      if (res.job_id) {
-        setJobId(res.job_id)
+      if (response.job_id) {
+        setJobId(response.job_id)
       } else {
         queryClient.invalidateQueries({ queryKey: ['library'] })
       }
       setUrl('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start ingestion')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to start ingestion')
     } finally {
       setSubmitting(false)
     }
@@ -122,170 +143,204 @@ export default function Ingest() {
   }
 
   function playlistStatus(playlistId: number): string {
-    const items = library?.videos.filter((v) => v.playlist_id === playlistId)
+    const items = library?.videos.filter((video) => video.playlist_id === playlistId)
     if (!items || items.length === 0) return 'empty'
-    if (items.every((v) => v.status === 'ready')) return 'ready'
-    if (items.some((v) => v.status === 'failed')) return 'failed'
+    if (items.every((video) => video.status === 'ready')) return 'ready'
+    if (items.some((video) => video.status === 'failed')) return 'failed'
     return 'processing'
   }
 
   const ingesting = submitting || jobId !== null
   const hasLibrary =
     library && (library.videos.length > 0 || library.playlists.length > 0)
+  const progress = job && job.total > 0 ? (job.done / job.total) * 100 : 0
 
   return (
-    <div className="h-full overflow-y-auto bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="text-2xl font-semibold">Ingest</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Paste a YouTube URL to ingest its transcript. Once ready, chat about
-          it.
-        </p>
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto w-full max-w-[800px] px-4 py-8 sm:px-6 sm:py-10">
+        <header>
+          <Eyebrow>build your searchable library</Eyebrow>
+          <h1 className="app-page-title">Ingest</h1>
+          <p className="app-page-sub">
+            Paste a YouTube URL to prepare its transcript. Once it’s ready, start asking questions.
+          </p>
+        </header>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-3">
-          <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
-            {(['video', 'playlist'] as IngestType[]).map((t) => (
+        <form onSubmit={handleSubmit} className="mt-7">
+          <div className="segmented" role="group" aria-label="Source type">
+            {(['video', 'playlist'] as IngestType[]).map((sourceType) => (
               <button
-                key={t}
+                key={sourceType}
                 type="button"
-                onClick={() => setType(t)}
-                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  type === t
-                    ? 'bg-zinc-700 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                onClick={() => setType(sourceType)}
+                className="segmented__button"
+                aria-pressed={type === sourceType}
               >
-                {t === 'video' ? 'Video' : 'Playlist'}
+                {sourceType === 'video' ? <Video className="h-4 w-4" aria-hidden="true" /> : <ListVideo className="h-4 w-4" aria-hidden="true" />}
+                {sourceType === 'video' ? 'Video' : 'Playlist'}
               </button>
             ))}
           </div>
 
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder={
-                type === 'video'
-                  ? 'https://youtube.com/watch?v=…'
-                  : 'https://youtube.com/playlist?list=…'
-              }
-              disabled={ingesting}
-              className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 ring-1 ring-inset ring-zinc-800 focus:outline-none focus:ring-zinc-600"
-            />
-            <button
-              type="submit"
-              disabled={ingesting || !url.trim()}
-              className="flex items-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {ingesting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Link2 className="h-4 w-4" />
-              )}
-              Ingest
-            </button>
-          </div>
+          <Card app className="mt-5 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <Input
+                app
+                wrapperClassName="flex-1"
+                label="YouTube URL"
+                type="url"
+                required
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder={
+                  type === 'video'
+                    ? 'https://youtube.com/watch?v=…'
+                    : 'https://youtube.com/playlist?list=…'
+                }
+                disabled={ingesting}
+                error={error ?? undefined}
+              />
+              <Button
+                app
+                type="submit"
+                disabled={ingesting}
+                className="w-full sm:mt-[30px] sm:w-auto"
+                aria-busy={submitting}
+              >
+                {ingesting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
+                Ingest
+              </Button>
+            </div>
+          </Card>
         </form>
 
         {job && (
-          <div className="mt-4 rounded-lg bg-zinc-900 p-3 ring-1 ring-inset ring-zinc-800">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-300">
-                Ingesting… {job.done}/{job.total}
+          <Card app className="mt-5 p-4" role="status">
+            <div className="flex items-center justify-between gap-4 text-sm font-semibold">
+              <span>
+                {job.status === 'done'
+                  ? 'Ingestion complete'
+                  : job.status === 'failed'
+                    ? 'Ingestion failed'
+                    : `Ingesting… ${job.done}/${job.total}`}
               </span>
-              <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+              {job.status === 'done' ? (
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+              ) : job.status === 'failed' ? (
+                <XCircle className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              )}
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
-              <div
-                className="h-full bg-zinc-500 transition-all"
-                style={{
-                  width: `${job.total > 0 ? (job.done / job.total) * 100 : 0}%`,
-                }}
-              />
+            <div
+              className="progress__track mt-3"
+              role="progressbar"
+              aria-label="Ingestion progress"
+              aria-valuemin={0}
+              aria-valuemax={job.total || 1}
+              aria-valuenow={Math.min(job.done, job.total || 1)}
+              aria-valuetext={`${job.done} of ${job.total} items processed`}
+            >
+              <div className="progress__fill" style={{ width: `${progress}%` }} />
             </div>
-          </div>
+          </Card>
         )}
 
-        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+        <section id="library" className="mt-10 scroll-mt-5" aria-labelledby="library-title">
+          <div className="mb-5">
+            <Eyebrow>your sources, ready when you are</Eyebrow>
+            <h2 id="library-title" className="app-page-title">Library</h2>
+          </div>
 
-        <div className="mt-8">
-          <h2 className="text-sm font-medium text-zinc-400">Library</h2>
-
-          {library && library.videos.length > 0 && (
-            <div className="mt-3 space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                Videos
-              </p>
-              {library.videos.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-inset ring-zinc-800/50"
-                >
-                  <Video className="h-4 w-4 shrink-0 text-zinc-600" />
-                  <div className="flex-1 truncate">
-                    <p className="truncate text-sm text-zinc-200">
-                      {v.title ?? 'Untitled video'}
-                    </p>
+          {libraryLoading && (
+            <div className="space-y-3" role="status" aria-label="Loading your library">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="library-row" aria-hidden="true">
+                  <div className="skeleton h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-2/3" />
+                    <div className="skeleton h-3 w-1/3" />
                   </div>
-                  <StatusBadge status={v.status} />
-                  {v.status === 'ready' && (
-                    <button
-                      type="button"
-                      onClick={() => startChat({ kind: 'video', id: v.id })}
-                      className="rounded-md bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
-                    >
-                      Chat
-                    </button>
-                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {library && library.playlists.length > 0 && (
-            <div className="mt-4 space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-600">
-                Playlists
-              </p>
-              {library.playlists.map((p) => {
-                const status = playlistStatus(p.id)
-                return (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-inset ring-zinc-800/50"
-                  >
-                    <ListVideo className="h-4 w-4 shrink-0 text-zinc-600" />
-                    <div className="flex-1 truncate">
-                      <p className="truncate text-sm text-zinc-200">{p.title}</p>
-                      <p className="text-xs text-zinc-600">
-                        {p.item_count} videos
-                      </p>
-                    </div>
-                    <StatusBadge status={status} />
-                    {status === 'ready' && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          startChat({ kind: 'playlist', id: p.id })
-                        }
-                        className="rounded-md bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
-                      >
+          {libraryError && (
+            <Card tone="blush" app className="p-5">
+              <p className="m-0 text-sm" role="alert">Your library couldn’t be loaded.</p>
+              <Button variant="ghost" size="sm" className="mt-4" onClick={() => void refetchLibrary()}>
+                Retry loading
+              </Button>
+            </Card>
+          )}
+
+          {library && library.videos.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="m-0 text-sm tracking-wide">Videos</h3>
+              {library.videos.map((video) => (
+                <article key={video.id} className="library-row">
+                  {video.thumbnail_url ? (
+                    <img src={video.thumbnail_url} alt="" loading="lazy" className="library-row__thumb" />
+                  ) : (
+                    <div className="library-row__tile"><Video className="h-5 w-5" aria-hidden="true" /></div>
+                  )}
+                  <div className="library-row__body">
+                    <p className="library-row__title">{video.title ?? 'Untitled video'}</p>
+                    <p className="library-row__meta">
+                      {[video.channel, video.duration_s != null ? formatTime(video.duration_s) : null]
+                        .filter(Boolean)
+                        .join(' · ') || 'Video transcript'}
+                    </p>
+                  </div>
+                  <div className="library-row__actions">
+                    <StatusBadge status={video.status} />
+                    {video.status === 'ready' && (
+                      <Button app size="sm" onClick={() => startChat({ kind: 'video', id: video.id })}>
                         Chat
-                      </button>
+                      </Button>
                     )}
                   </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {library && library.playlists.length > 0 && (
+            <div className="mt-7 space-y-3">
+              <h3 className="m-0 text-sm tracking-wide">Playlists</h3>
+              {library.playlists.map((playlist) => {
+                const status = playlistStatus(playlist.id)
+                return (
+                  <article key={playlist.id} className="library-row">
+                    <div className="library-row__tile"><ListVideo className="h-5 w-5" aria-hidden="true" /></div>
+                    <div className="library-row__body">
+                      <p className="library-row__title">{playlist.title}</p>
+                      <p className="library-row__meta">{playlist.item_count} videos</p>
+                    </div>
+                    <div className="library-row__actions">
+                      <StatusBadge status={status} />
+                      {status === 'ready' && (
+                        <Button app size="sm" onClick={() => startChat({ kind: 'playlist', id: playlist.id })}>
+                          Chat
+                        </Button>
+                      )}
+                    </div>
+                  </article>
                 )
               })}
             </div>
           )}
 
-          {!hasLibrary && (
-            <p className="mt-3 text-sm text-zinc-600">
-              No videos yet. Paste a URL above to get started.
-            </p>
+          {!libraryLoading && !libraryError && !hasLibrary && (
+            <EmptyState
+              icon={LibraryBig}
+              title="Your library is ready for its first source"
+              description="Paste a video or playlist URL above. Prepared transcripts will appear here."
+              reassurance="One good video is enough to start."
+            />
           )}
-        </div>
+        </section>
       </div>
     </div>
   )
