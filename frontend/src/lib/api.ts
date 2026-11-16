@@ -20,6 +20,9 @@ export interface Video {
   id: number
   youtube_video_id: string
   title: string | null
+  channel: string | null
+  duration_s: number | null
+  thumbnail_url: string | null
   status: string
   playlist_id: number | null
 }
@@ -72,14 +75,14 @@ export interface ChatMessage {
 }
 
 export interface ChatSummary {
-  id: number
+  id: string
   title: string | null
   video_id: number | null
   playlist_id: number | null
 }
 
 export interface ChatDetail {
-  id: number
+  id: string
   title: string | null
   video_id: number | null
   playlist_id: number | null
@@ -87,7 +90,7 @@ export interface ChatDetail {
 }
 
 export interface SendChatResponse {
-  chat_id: number
+  chat_id: string
   answer: string
   citations: Citation[]
 }
@@ -107,8 +110,8 @@ export const api = {
   getJob: (id: number) => apiFetch<JobStatus>(`/jobs/${id}`),
   getLibrary: () => apiFetch<Library>('/library'),
   listChats: () => apiFetch<ChatSummary[]>('/chats'),
-  getChat: (id: number) => apiFetch<ChatDetail>(`/chats/${id}`),
-  sendChat: (body: { message: string; chat_id?: number; scope: Scope }) =>
+  getChat: (id: string) => apiFetch<ChatDetail>(`/chats/${id}`),
+  sendChat: (body: { message: string; chat_id?: string; scope: Scope }) =>
     apiFetch<SendChatResponse>('/chat', {
       method: 'POST',
       body: JSON.stringify(body),
