@@ -1,21 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  Link,
   Navigate,
   Route,
   Routes,
   useNavigate,
   useSearchParams,
 } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 
 import Protected from './components/auth/Protected'
 import SignIn from './components/auth/SignIn'
+import AuthPanel from './components/auth/AuthPanel'
 import AppLayout from './components/layout/AppLayout'
 import ChatLayout from './components/layout/ChatLayout'
 import Chat from './routes/Chat'
 import Ingest from './routes/Ingest'
 import Landing from './routes/Landing'
 import { supabase } from './lib/supabase'
+import { ButtonLink } from './components/ui/Button'
 
 const SIGN_IN_TIMEOUT_MS = 15_000
 
@@ -76,25 +78,30 @@ function AuthCallback() {
 
   if (error) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 text-zinc-100">
-        <div className="w-full max-w-sm text-center">
-          <h1 className="text-lg font-semibold">Couldn't sign you in</h1>
-          <p className="mt-2 text-sm text-zinc-400">{error}</p>
-          <Link
-            to="/signin"
-            className="mt-6 inline-block rounded-lg bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-white"
-          >
-            Back to sign in
-          </Link>
-        </div>
-      </main>
+      <AuthPanel
+        eyebrow="a small detour"
+        title="Couldn’t sign you in"
+        description="The sign-in flow did not complete. Return to the sign-in page and try again."
+        error={error}
+      >
+        <ButtonLink to="/signin" variant="ghost" className="w-full">
+          Back to sign in
+        </ButtonLink>
+      </AuthPanel>
     )
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
-      <p className="text-sm">Signing you in…</p>
-    </main>
+    <AuthPanel
+      eyebrow="nearly there"
+      title="Opening your library"
+      description="Finishing secure sign-in and preparing your conversations."
+    >
+      <p className="thinking justify-center" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Signing you in…
+      </p>
+    </AuthPanel>
   )
 }
 
@@ -117,7 +124,6 @@ export default function App() {
       >
         <Route path="/ingest" element={<Ingest />} />
         <Route element={<ChatLayout />}>
-          <Route path="/c/new" element={<Chat />} />
           <Route path="/c/:chatId" element={<Chat />} />
         </Route>
       </Route>
