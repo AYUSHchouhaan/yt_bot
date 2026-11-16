@@ -1,0 +1,35 @@
+@theme {
+  --color-paper: #fbf3e4;
+  --color-paper-deep: #f3e4c6;
+  --color-ink: #1b1712;
+  --color-ink-soft: #5a5044;
+  --color-ink-mute: #8a7d6a;
+  --color-red: #ff3b2f;
+  --color-red-deep: #d52817;
+  --color-yellow: #ffce4a;
+  --color-teal: #36c2ad;
+  --color-sky: #74a7ff;
+  --color-coral: #ff9e86;
+  --color-lilac: #c8a8ff;
+  --color-card-warm: #fff7e0;
+  --color-card-cool: #e6fbf6;
+  --color-card-blush: #fff0ec;
+
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-hand: "Shantell Sans", ui-rounded, cursive;
+
+  --radius-nb-sm: 12px;
+  --radius-nb-md: 16px;
+  --radius-nb-lg: 26px;
+
+  --shadow-nb-xs: 3px 3px 0 #1b1712;
+  --shadow-nb-sm: 4px 4px 0 #1b1712;
+  --shadow-nb: 5px 5px 0 #1b1712;
+  --shadow-nb-lg: 9px 9px 0 #1b1712;
+  --shadow-nb-hover: 7px 7px 0 #1b1712;
+  --shadow-nb-card-hover: 8px 8px 0 #1b1712;
+  --shadow-nb-press: 2px 2px 0 #1b1712;
+  --shadow-nb-app: 4px 4px 0 #1b1712;
+  --shadow-nb-app-hover: 6px 6px 0 #1b1712;
+}
