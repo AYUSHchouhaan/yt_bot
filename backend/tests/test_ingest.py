@@ -6,7 +6,7 @@ from uuid import uuid4
 import jwt
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
 
 from app.config import settings
 from app.db import SessionLocal, engine
@@ -147,6 +147,41 @@ async def test_ingest_full_pipeline(
         assert chunks[-1].chunk_index == 4
 
     assert call_log == ["fetch_metadata", "fetch_transcript", "embed_texts"]
+
+
+async def test_ingest_status_transitions(
+    client: AsyncClient, cleanup_users: list[str]
+) -> None:
+    sub = f"test-{uuid4()}"
+    cleanup_users.append(sub)
+    headers = _auth_headers(sub)
+
+    transitions: list[str] = []
+
+    def record_status(target, value, oldvalue, initiator) -> None:
+        if value != oldvalue:
+            transitions.append(value)
+
+    event.listen(Video.status, "set", record_status)
+    try:
+        response = await client.post(
+            "/ingest/video",
+            json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+            headers=headers,
+        )
+        assert response.status_code == 202
+        assert response.json()["status"] == "queued"
+
+        job_id = response.json()["job_id"]
+        job_resp = await client.get(f"/jobs/{job_id}", headers=headers)
+        assert job_resp.json()["status"] == "done"
+    finally:
+        event.remove(Video.status, "set", record_status)
+
+    assert "fetching" in transitions
+    assert "embedding" in transitions
+    assert transitions[-1] == "ready"
+    assert transitions.index("fetching") < transitions.index("embedding")
 
 
 async def test_repost_same_url_is_noop(
