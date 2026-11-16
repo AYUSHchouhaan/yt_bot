@@ -128,6 +128,7 @@ class Chat(Base):
     __tablename__ = "chats"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(32), unique=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("app_users.id", ondelete="CASCADE"), index=True
     )
