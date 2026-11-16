@@ -6,7 +6,7 @@
 >
 > **Reference screenshots:** [`reference/hero-1440.png`](./reference/hero-1440.png) · [`reference/hero-390.png`](./reference/hero-390.png) · [`reference/button-hover.png`](./reference/button-hover.png) · [`reference/card-hover.png`](./reference/card-hover.png) · [`reference/app-feed-1440.png`](./reference/app-feed-1440.png) · [`reference/app-feed-390.png`](./reference/app-feed-390.png) · [`reference/app-channels-1440.png`](./reference/app-channels-1440.png) · [`reference/app-channels-390.png`](./reference/app-channels-390.png)
 >
-> **Status:** spec only. Nothing in `frontend/` has been changed yet.
+> **Status:** implemented across the landing, authentication, app shell, ingestion/library, and chat surfaces in `frontend/`.
 
 ---
 
@@ -530,7 +530,7 @@ Repeated per element, that is unreadable, drifts silently from this spec, and ca
 |---|---|
 | `src/styles/tokens.css` | The `@theme` block: colours, fonts, radii, shadows. Produces `bg-paper`, `text-ink`, `font-display`, `shadow-nb`, `rounded-nb-md`, and the same values as CSS variables. |
 | `src/styles/base.css` | `body` paper + dot grid, grain overlay, `h1–h3`, `::selection`, `:focus-visible`, reduced-motion block. |
-| `src/styles/components.css` (`@layer components`) | Every component with ≥2 states: `.btn--primary/ghost/link/danger`, `.card`, `.chip`, `.tag`, `.stat`, `.input`, `.nav-pill`, `.note`, `.board`, `.ticker`, `.eyes`, `.eyebrow`. |
+| `src/styles/components.css` (`@layer components`) | Every component with ≥2 states: `.btn--primary/ghost/link/danger`, `.card`, `.chip`, `.tag`, `.stat`, `.input`, `.nav-pill`, `.note`, `.board`, `.ticker`, `.eyes`, `.eyebrow`, plus the implemented `.persona`, `.step`, `.cta`, `.footer`, `.mobile-menu`, `.auth-panel`, `.mobile-bar`, `.segmented`, `.library-row`, `.skeleton`, `.chat-*`, `.welcome-*`, `.message--user/assistant`, `.citation`, and `.scope-*` families. |
 | JSX utilities | Layout, flex/grid, spacing, responsive prefixes (`md:`, `lg:`), one-off positioning, truncation. |
 
 `src/index.css` becomes a pure entry point:
