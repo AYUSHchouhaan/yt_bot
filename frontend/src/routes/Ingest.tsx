@@ -134,7 +134,7 @@ export default function Ingest() {
     library && (library.videos.length > 0 || library.playlists.length > 0)
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="h-full overflow-y-auto bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-2xl px-4 py-8">
         <h1 className="text-2xl font-semibold">Ingest</h1>
         <p className="mt-1 text-sm text-zinc-400">
@@ -225,7 +225,7 @@ export default function Ingest() {
                   <Video className="h-4 w-4 shrink-0 text-zinc-600" />
                   <div className="flex-1 truncate">
                     <p className="truncate text-sm text-zinc-200">
-                      {v.title ?? v.youtube_video_id}
+                      {v.title ?? 'Untitled video'}
                     </p>
                   </div>
                   <StatusBadge status={v.status} />
