@@ -8,21 +8,21 @@ function renderContent(text: string, citations: Citation[] | null) {
 
   const referenced = new Set<number>()
   const parts = text.split(/(\[\d+\])/g)
-  const rendered = parts.map((part, i) => {
+  const rendered = parts.map((part, index) => {
     const match = part.match(/^\[(\d+)\]$/)
     if (match) {
-      const idx = parseInt(match[1], 10)
-      const citation = citations[idx - 1]
+      const citationIndex = parseInt(match[1], 10)
+      const citation = citations[citationIndex - 1]
       if (citation) {
-        referenced.add(idx)
-        return <CitationChip key={i} index={idx} citation={citation} />
+        referenced.add(citationIndex)
+        return <CitationChip key={index} index={citationIndex} citation={citation} />
       }
     }
-    return <span key={i}>{part}</span>
+    return <span key={index}>{part}</span>
   })
 
   const unreferenced = citations
-    .map((c, i) => ({ citation: c, index: i + 1 }))
+    .map((citation, index) => ({ citation, index: index + 1 }))
     .filter(({ index }) => !referenced.has(index))
 
   if (unreferenced.length === 0) return rendered
@@ -50,25 +50,20 @@ export default function Messages({
 
   return (
     <>
-      {messages.map((msg) => {
-        const isUser = msg.role === 'user'
+      {messages.map((message) => {
+        const isUser = message.role === 'user'
         return (
           <div
-            key={msg.id}
+            key={message.id}
+            data-message-id={message.id}
             className={isUser ? 'flex justify-end' : 'flex justify-start'}
           >
-            <div
-              className={
-                isUser
-                  ? 'max-w-[80%] rounded-2xl bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100'
-                  : 'max-w-[85%] text-sm leading-relaxed text-zinc-200'
-              }
-            >
+            <div className={isUser ? 'message--user' : 'message--assistant'}>
               {isUser ? (
-                msg.content
+                message.content
               ) : (
                 <div className="space-y-1.5">
-                  {renderContent(msg.content, msg.citations)}
+                  {renderContent(message.content, message.citations)}
                 </div>
               )}
             </div>
@@ -77,10 +72,10 @@ export default function Messages({
       })}
       {thinking && (
         <div className="flex justify-start">
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Thinking…
-          </div>
+          <p className="thinking" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            Thinking through your library…
+          </p>
         </div>
       )}
     </>
