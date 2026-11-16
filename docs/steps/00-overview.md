@@ -14,6 +14,7 @@ Build in this order. Each file describes **what to implement** and **how to test
 | 08 | `08-langgraph-chatbot.md` | LangGraph agent with RAG tool, multi-turn, PostgresSaver | tool called when needed, multi-turn memory, citations |
 | 09 | `09-frontend.md` | Sign-in, ingestion, ChatGPT-style chat UI, sidebar, `/c/[id]` | ingest → chat → follow-up → citation |
 | 10 | `10-env-and-config.md` | Env templates, gitignore | config loads, git clean |
+| 11 | `11-landing-and-app-shell.md` | Landing page, persistent navbar + sidebar shell, random long chat IDs, metadata-only scope selector | layout persistence, random-id uniqueness, first-message navigation |
 
 ## v1 scope (locked)
 
@@ -27,4 +28,3 @@ Build in this order. Each file describes **what to implement** and **how to test
 ## Reference docs
 
 - `docs/ARCHITECTURE.md` — full system architecture
-- `docs/INGESTION_AND_RETRIEVAL.md` — chunking spec, retrieval strategy, assignment mapping
