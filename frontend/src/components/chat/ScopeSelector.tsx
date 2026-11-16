@@ -1,42 +1,33 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, Clock, Layers, ListVideo, Video as VideoIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 
 import { api, formatTime, type Library, type Playlist, type Scope, type Video } from '../../lib/api'
+import { cn } from '../../lib/cn'
 
-function derivePlaylistStatus(
-  playlist: Playlist,
-  videos: Library['videos'],
-): string {
-  const items = videos.filter((v) => v.playlist_id === playlist.id)
+function derivePlaylistStatus(playlist: Playlist, videos: Library['videos']): string {
+  const items = videos.filter((video) => video.playlist_id === playlist.id)
   if (items.length === 0) return 'empty'
-  if (items.every((v) => v.status === 'ready')) return 'ready'
-  if (items.some((v) => v.status === 'failed')) return 'failed'
+  if (items.every((video) => video.status === 'ready')) return 'ready'
+  if (items.some((video) => video.status === 'failed')) return 'failed'
   return 'processing'
 }
 
-function VideoThumb({
-  video,
-  className,
-}: {
-  video: Video
-  className: string
-}) {
+function VideoThumb({ video, className }: { video: Video; className: string }) {
   if (video.thumbnail_url) {
     return (
       <img
         src={video.thumbnail_url}
         alt=""
         loading="lazy"
-        className={`shrink-0 rounded-md object-cover ${className}`}
+        className={cn('scope-thumb', className)}
       />
     )
   }
+
   return (
-    <div
-      className={`flex shrink-0 items-center justify-center rounded-md bg-zinc-800 ${className}`}
-    >
-      <VideoIcon className="h-3.5 w-3.5 text-zinc-600" />
+    <div className={cn('scope-thumb flex items-center justify-center', className)}>
+      <VideoIcon className="scope-icon h-4 w-4" aria-hidden="true" />
     </div>
   )
 }
@@ -55,6 +46,8 @@ export default function ScopeSelector({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
 
   const { data: library } = useQuery<Library>({
     queryKey: ['library'],
@@ -62,159 +55,142 @@ export default function ScopeSelector({
   })
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+    function handleClickOutside(event: PointerEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('pointerdown', handleClickOutside)
+    return () => document.removeEventListener('pointerdown', handleClickOutside)
   }, [])
 
-  const readyVideos = library?.videos.filter((v) => v.status === 'ready') ?? []
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Escape') return
+    event.stopPropagation()
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
+  const readyVideos = library?.videos.filter((video) => video.status === 'ready') ?? []
   const readyPlaylists =
     library?.playlists.filter(
-      (p) => library && derivePlaylistStatus(p, library.videos) === 'ready',
+      (playlist) => library && derivePlaylistStatus(playlist, library.videos) === 'ready',
     ) ?? []
 
   const selectedVideo =
-    value.kind === 'video' ? readyVideos.find((v) => v.id === value.id) : undefined
+    value.kind === 'video' ? readyVideos.find((video) => video.id === value.id) : undefined
   const selectedPlaylist =
     value.kind === 'playlist'
-      ? readyPlaylists.find((p) => p.id === value.id)
+      ? readyPlaylists.find((playlist) => playlist.id === value.id)
       : undefined
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" onKeyDown={handleKeyDown}>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2.5 rounded-lg bg-zinc-800/60 px-3 py-1.5 text-left text-sm text-zinc-300 ring-1 ring-inset ring-zinc-700/60 transition-colors hover:bg-zinc-800"
+        onClick={() => setOpen((current) => !current)}
+        className="scope-trigger"
+        aria-expanded={open}
+        aria-controls={menuId}
       >
         {selectedVideo ? (
           <VideoThumb video={selectedVideo} className="h-8 w-14" />
+        ) : selectedPlaylist ? (
+          <ListVideo className="scope-icon h-5 w-5" aria-hidden="true" />
         ) : (
-          <Layers className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+          <Layers className="scope-icon h-4 w-4" aria-hidden="true" />
         )}
-        <span className="min-w-0 flex-1">
+        <span className="scope-trigger__body">
           {selectedVideo ? (
             <>
-              <span className="block truncate text-zinc-200">
-                {selectedVideo.title ?? 'Untitled video'}
-              </span>
-              <span className="block truncate text-xs text-zinc-500">
-                {videoSummary(selectedVideo) || 'Video'}
-              </span>
+              <span className="scope-trigger__title">{selectedVideo.title ?? 'Untitled video'}</span>
+              <span className="scope-trigger__meta">{videoSummary(selectedVideo) || 'Video'}</span>
             </>
           ) : selectedPlaylist ? (
             <>
-              <span className="block truncate text-zinc-200">
-                {selectedPlaylist.title}
-              </span>
-              <span className="block truncate text-xs text-zinc-500">
-                {selectedPlaylist.item_count} videos
-              </span>
+              <span className="scope-trigger__title">{selectedPlaylist.title}</span>
+              <span className="scope-trigger__meta">{selectedPlaylist.item_count} videos</span>
             </>
           ) : (
-            <span className="block truncate">
-              {value.kind === 'playlist' ? 'Playlist' : 'Entire library'}
+            <span className="scope-trigger__title">
+              {value.kind === 'playlist' ? 'Playlist' : value.kind === 'video' ? 'Video' : 'Entire library'}
             </span>
           )}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+        <ChevronDown className={`scope-icon h-4 w-4 ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 z-10 mb-1 max-h-72 w-full overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl">
+        <div id={menuId} className="scope-menu" role="group" aria-label="Available chat scopes">
           <button
             type="button"
             onClick={() => {
               onChange({ kind: 'library' })
               setOpen(false)
             }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+            className="scope-option"
+            aria-current={value.kind === 'library' ? 'true' : undefined}
           >
-            <Layers className="h-3.5 w-3.5 text-zinc-500" />
-            Entire library
+            <Layers className="scope-icon h-4 w-4" aria-hidden="true" />
+            <span className="scope-option__title">Entire library</span>
           </button>
 
-          {readyVideos.length > 0 && (
-            <div className="px-3 pt-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Videos
-            </div>
-          )}
-          {readyVideos.map((v) => {
-            const parent = v.playlist_id
-              ? library?.playlists.find((p) => p.id === v.playlist_id)
+          {readyVideos.length > 0 && <p className="scope-group-label">Videos</p>}
+          {readyVideos.map((video) => {
+            const parent = video.playlist_id
+              ? library?.playlists.find((playlist) => playlist.id === video.playlist_id)
               : null
-            const summary = videoSummary(v)
+            const summary = videoSummary(video)
             return (
               <button
-                key={v.id}
+                key={video.id}
                 type="button"
                 onClick={() => {
-                  onChange({ kind: 'video', id: v.id })
+                  onChange({ kind: 'video', id: video.id })
                   setOpen(false)
                 }}
-                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-800"
+                className="scope-option"
+                aria-current={value.kind === 'video' && value.id === video.id ? 'true' : undefined}
               >
-                <VideoThumb video={v} className="h-10 w-[72px]" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-zinc-200">
-                    {v.title ?? 'Untitled video'}
-                  </span>
-                  {summary && (
-                    <span className="block truncate text-xs text-zinc-500">
-                      {summary}
-                    </span>
-                  )}
-                  {parent && (
-                    <span className="block truncate text-xs text-zinc-600">
-                      {parent.title}
-                    </span>
-                  )}
+                <VideoThumb video={video} className="h-10 w-[72px]" />
+                <span className="scope-option__body">
+                  <span className="scope-option__title">{video.title ?? 'Untitled video'}</span>
+                  {summary && <span className="scope-option__meta">{summary}</span>}
+                  {parent && <span className="scope-option__meta">{parent.title}</span>}
                 </span>
-                {v.duration_s != null && (
-                  <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-600">
-                    <Clock className="h-3 w-3" />
-                    {formatTime(v.duration_s)}
+                {video.duration_s != null && (
+                  <span className="scope-option__meta flex shrink-0 items-center gap-1">
+                    <Clock className="h-3 w-3" aria-hidden="true" />
+                    {formatTime(video.duration_s)}
                   </span>
                 )}
               </button>
             )
           })}
 
-          {readyPlaylists.length > 0 && (
-            <div className="px-3 pt-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Playlists
-            </div>
-          )}
-          {readyPlaylists.map((p) => (
+          {readyPlaylists.length > 0 && <p className="scope-group-label">Playlists</p>}
+          {readyPlaylists.map((playlist) => (
             <button
-              key={p.id}
+              key={playlist.id}
               type="button"
               onClick={() => {
-                onChange({ kind: 'playlist', id: p.id })
+                onChange({ kind: 'playlist', id: playlist.id })
                 setOpen(false)
               }}
-              className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-800"
+              className="scope-option"
+              aria-current={value.kind === 'playlist' && value.id === playlist.id ? 'true' : undefined}
             >
-              <div className="flex h-10 w-[72px] shrink-0 items-center justify-center rounded-md bg-zinc-800">
-                <ListVideo className="h-5 w-5 text-zinc-600" />
-              </div>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-zinc-200">{p.title}</span>
-                <span className="block text-xs text-zinc-500">
-                  {p.item_count} videos
-                </span>
+              <span className="scope-thumb flex h-10 w-[72px] items-center justify-center">
+                <ListVideo className="scope-icon h-5 w-5" aria-hidden="true" />
+              </span>
+              <span className="scope-option__body">
+                <span className="scope-option__title">{playlist.title}</span>
+                <span className="scope-option__meta">{playlist.item_count} videos</span>
               </span>
             </button>
           ))}
 
           {readyVideos.length === 0 && readyPlaylists.length === 0 && (
-            <div className="px-3 py-2 text-xs text-zinc-500">
-              Ingest a video to scope your chat.
-            </div>
+            <p className="scope-option__meta px-3 py-2">Ingest a video to scope your chat.</p>
           )}
         </div>
       )}
